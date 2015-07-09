@@ -1,0 +1,12 @@
+Running IDA*, initial board:
+0 0 0 0 0 0 0 0 
+0 < > . . . ^ 0 
+0 ^ . . ^ . | 0 
+0 v ? ? | . v * 
+0 ^ . . v . . 0 
+0 | . . . < > 0 
+0 v . < - > . 0 
+0 0 0 0 0 0 0 0 
+
+Try bound 3 4 5 6 7 8 
+result is 61 solutions of 8 steps
