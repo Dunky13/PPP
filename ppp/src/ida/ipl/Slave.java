@@ -1,5 +1,7 @@
 package ida.ipl;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import ibis.ipl.ConnectionClosedException;
 import ibis.ipl.IbisIdentifier;
 import ibis.ipl.MessageUpcall;
@@ -7,8 +9,6 @@ import ibis.ipl.ReadMessage;
 import ibis.ipl.ReceivePort;
 import ibis.ipl.SendPort;
 import ibis.ipl.WriteMessage;
-import java.io.IOException;
-import java.util.ArrayList;
 
 public class Slave implements MessageUpcall
 {
@@ -21,7 +21,6 @@ public class Slave implements MessageUpcall
 	Slave(Ida parent)
 	{
 		this.parent = parent;
-		cache = null;
 	}
 
 	void openPorts(IbisIdentifier master) throws IOException
@@ -54,8 +53,12 @@ public class Slave implements MessageUpcall
 		}
 	}
 
-	void run(IbisIdentifier master) throws IOException, ClassNotFoundException, InterruptedException
+	void run(IbisIdentifier master, boolean useCache) throws IOException, ClassNotFoundException, InterruptedException
 	{
+		if (useCache)
+		{
+			cache = new BoardCache();
+		}
 		// Open send and receive ports
 		openPorts(master);
 
@@ -84,17 +87,35 @@ public class Slave implements MessageUpcall
 			// Process the cube and send back the number of solutions
 			Board board = (Board)rm.readObject();
 			rm.finish();
-			if (cache == null)
+
+			if (board.distance() == 1)
 			{
-				cache = new BoardCache();
+				sendInt(1);
 			}
-			sendInt(solutions(board, cache));
+			else if (board.distance() > board.bound())
+			{
+				sendInt(0);
+			}
+			else
+			{
+				sendBoards(cache == null ? board.makeMoves() : board.makeMoves(cache));
+			}
+
 		}
 	}
 
-	void sendInt(int value) throws IOException
+	private void sendBoards(ArrayList<Board> boards) throws IOException
 	{
 		WriteMessage wm = sender.newMessage();
+		wm.writeBoolean(false);
+		wm.writeObject(boards);
+		wm.finish();
+	}
+
+	private void sendInt(int value) throws IOException
+	{
+		WriteMessage wm = sender.newMessage();
+		wm.writeBoolean(true);
 		wm.writeInt(value);
 		wm.finish();
 	}
@@ -109,27 +130,27 @@ public class Slave implements MessageUpcall
 	 *            cache of cubes used for new cube objects
 	 * @return the number of solutions found
 	 */
-	public int solutions(Board board, BoardCache cache)
-	{
-		if (board.distance() == 1)
-		{
-			return 1;
-		}
-
-		if (board.distance() > board.bound())
-		{
-			return 0;
-		}
-
-		ArrayList<Board> moves = cache == null ? board.makeMoves() : board.makeMoves(cache);
-		int result = 0;
-
-		for (Board child : moves)
-		{
-			result += solutions(child, cache);
-		}
-		cache.put(moves);
-
-		return result;
-	}
+	//	public int solutions(Board board, BoardCache cache)
+	//	{
+	//		if (board.distance() == 1)
+	//		{
+	//			return 1;
+	//		}
+	//
+	//		if (board.distance() > board.bound())
+	//		{
+	//			return 0;
+	//		}
+	//
+	//		ArrayList<Board> moves = cache == null ? board.makeMoves() : board.makeMoves(cache);
+	//		int result = 0;
+	//
+	//		for (Board child : moves)
+	//		{
+	//			result += solutions(child, cache);
+	//		}
+	//		cache.put(moves);
+	//
+	//		return result;
+	//	}
 }

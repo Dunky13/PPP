@@ -33,10 +33,31 @@ public class Ida
 		ibis = IbisFactory.createIbis(ibisCapabilities, null, portType, portType);
 	}
 
-	void run(String[] arguments) throws Exception
+	void run(String[] args) throws Exception
 	{
 		// Wait until all ibises joined
 		//ibis.registry().waitUntilPoolClosed();
+
+		String fileName = null;
+		boolean useCache = true;
+
+		for (int i = 0; i < args.length; i++)
+		{
+			if (args[i].equals("--file"))
+			{
+				fileName = args[++i];
+			}
+			else if (args[i].equals("--nocache"))
+			{
+				useCache = false;
+			}
+			else
+			{
+				System.err.println("No such option: " + args[i]);
+				ibis.registry().terminate();
+				System.exit(1);
+			}
+		}
 
 		// Elect a master
 		IbisIdentifier master = ibis.registry().elect("Master");
@@ -44,11 +65,11 @@ public class Ida
 		// If I am the master, run master, else run worker
 		if (master.equals(ibis.identifier()))
 		{
-			new Server(this).run(arguments);
+			new Server(this).run(fileName);
 		}
 		else
 		{
-			new Slave(this).run(master);
+			new Slave(this).run(master, useCache);
 		}
 
 		// End ibis
