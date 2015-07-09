@@ -24,8 +24,7 @@ public class Ida
 
 	public final static IbisCapabilities ibisCapabilities = new IbisCapabilities(
 		IbisCapabilities.ELECTIONS_STRICT,
-		IbisCapabilities.TERMINATION,
-		IbisCapabilities.CLOSED_WORLD);
+		IbisCapabilities.TERMINATION);
 
 	public final Ibis ibis;
 
