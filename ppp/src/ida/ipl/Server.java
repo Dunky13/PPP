@@ -106,6 +106,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			sender.connect(worker, "slave");
 			senders.put(worker, sender);
 			waitingForWork.push(worker);
+			waitingForWork.notifyAll();
 		}
 		catch (IOException e)
 		{
@@ -150,6 +151,17 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			while (busyWorkers.get() != 0)
 			{
 				this.wait();
+			}
+		}
+	}
+
+	private void waitForWorkersToConnect() throws InterruptedException
+	{
+		synchronized (waitingForWork)
+		{
+			while (waitingForWork.isEmpty())
+			{
+				waitingForWork.wait();
 			}
 		}
 	}
@@ -277,10 +289,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			while (!deque.isEmpty())
 			{
 				while (waitingForWork.isEmpty())
-					waitForWorkers();
+					waitForWorkersToConnect();
 				sendBoard(getBoard(), waitingForWork.pop());
 				while (senders.size() > waitingForWork.size() && deque.isEmpty()) //While some workers are working - wait for them to finish
-					waitForWorkers();
+					waitForWorkersToConnect();
 			}
 
 			waitForWorkers();
