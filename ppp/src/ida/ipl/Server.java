@@ -105,8 +105,11 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			SendPort sender = parent.ibis.createSendPort(Ida.portType);
 			sender.connect(worker, "slave");
 			senders.put(worker, sender);
-			waitingForWork.push(worker);
-			waitingForWork.notifyAll();
+			synchronized (waitingForWork)
+			{
+				waitingForWork.push(worker);
+				waitingForWork.notifyAll();
+			}
 		}
 		catch (IOException e)
 		{
