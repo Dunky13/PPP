@@ -18,8 +18,13 @@ public class Board implements Serializable
 	/**
 	 * Class representing a position (line, column) on the board
 	 */
-	public static final class Position
+	public static final class Position implements Serializable
 	{
+		/**
+		 * 
+		 */
+		private static final long serialVersionUID = 1509529483481639045L;
+
 		public Position(int lin, int col)
 		{
 			this.lin = lin;
