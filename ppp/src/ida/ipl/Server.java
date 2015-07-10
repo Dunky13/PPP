@@ -25,58 +25,70 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private final Deque<IbisIdentifier> waitingForWork;
 	private ReceivePort receiver;
 	private final Deque<Board> deque;
-	private final AtomicInteger busyWorkers;
 	private final AtomicInteger solutions;
+	private Board initialBoard;
 
-	Server(Ida parent) throws IOException
+	public Server(Ida parent)
 	{
 		this.parent = parent;
 		senders = new HashMap<IbisIdentifier, SendPort>();
 		waitingForWork = new ArrayDeque<IbisIdentifier>();
 		deque = new ArrayDeque<Board>();
-		busyWorkers = new AtomicInteger(0);
 		solutions = new AtomicInteger(0);
 	}
 
 	/**
-	 * Creates a receive port to receive cube requests from workers.
-	 * 
-	 * @throws IOException
+	 * Main function.
+	 *
+	 * @param arguments
+	 *            list of arguments
 	 */
-	private void openPorts() throws IOException
+	public void run(String fileName) throws IOException
 	{
-		receiver = parent.ibis.createReceivePort(Ida.portType, "server", this, this, new Properties());
-		receiver.enableConnections();
-		receiver.enableMessageUpcalls();
-	}
 
-	/**
-	 * Sends a termination message to all connected workers and closes all
-	 * ports.
-	 * 
-	 * @throws IOException
-	 */
-	public void shutdown() throws IOException
-	{
-		// Terminate the pool
-		parent.ibis.registry().terminate();
+		initialBoard = null;
 
-		// Close ports (and send termination messages)
+		if (fileName == null)
+		{
+			System.err.println("No input file provided.");
+			parent.ibis.registry().terminate();
+			System.exit(1);
+		}
+		else
+		{
+			try
+			{
+				initialBoard = new Board(fileName);
+			}
+			catch (Exception e)
+			{
+				System.err.println("could not initialize board from file: " + e);
+				parent.ibis.registry().terminate();
+				System.exit(1);
+			}
+		}
+		System.out.println("Running IDA*, initial board:");
+		System.out.println(initialBoard);
+
+		// open Ibis ports
+		openPorts();
+
+		// solve
+		long start = System.currentTimeMillis();
 		try
 		{
-			for (SendPort sender : senders.values())
-			{
-				WriteMessage wm = sender.newMessage();
-				wm.writeBoolean(true);
-				wm.finish();
-				sender.close();
-			}
-			receiver.close();
+			solve(initialBoard);
 		}
-		catch (ConnectionClosedException e)
+		catch (InterruptedException e)
 		{
-			// do nothing
+			e.printStackTrace();
 		}
+		long end = System.currentTimeMillis();
+
+		// NOTE: this is printed to standard error! The rest of the output is
+		// constant for each set of parameters. Printing this to standard error
+		// makes the output of standard out comparable with "diff"
+		System.err.println("Solving cube took " + (end - start) + " milliseconds");
 	}
 
 	/**
@@ -130,69 +142,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	}
 
 	/**
-	 * Waits until all workers have finished their work and sent the number of
-	 * solutions.
-	 */
-	private void waitForWorkers() throws InterruptedException
-	{
-		synchronized (this)
-		{
-			while (busyWorkers.get() != 0)
-			{
-				this.wait();
-			}
-		}
-	}
-
-	private void waitForWorkersToConnect() throws InterruptedException
-	{
-		synchronized (waitingForWork)
-		{
-			while (waitingForWork.isEmpty())
-			{
-				waitingForWork.wait();
-			}
-		}
-	}
-
-	/**
-	 * Get the last cube from the deque, which will have less twists and thus
-	 * more work on average than cubes from the start of the deque.
-	 */
-	private Board getBoard()
-	{
-		Board board = null;
-		try
-		{
-			synchronized (deque)
-			{
-				while (deque.isEmpty())
-				{
-					deque.wait();
-				}
-				board = deque.pop();
-			}
-		}
-		catch (InterruptedException e)
-		{
-			e.printStackTrace(System.err);
-		}
-		return board;
-	}
-
-	/**
-	 * Send a cube to a worker.
-	 */
-	void sendBoard(Board board, IbisIdentifier destination) throws IOException
-	{
-		SendPort port = senders.get(destination);
-		WriteMessage wm = port.newMessage();
-		wm.writeBoolean(false);
-		wm.writeObject(board);
-		wm.finish();
-	}
-
-	/**
 	 * Processes a cube request / notification of found solutions from a worker.
 	 */
 	@SuppressWarnings("unchecked")
@@ -205,51 +154,85 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		ArrayList<Board> boards = null;
 		boolean recvInt = rm.readBoolean();
 
+		waitingForWork.add(sender);
 		if (recvInt)
 		{
 			requestValue = rm.readInt();
-			if (requestValue != Ida.INIT_VALUE)
+			rm.finish();
+			if (requestValue != Ida.INIT_VALUE) //Solution received
 			{
-				synchronized (this)
-				{
-					solutions.addAndGet(requestValue);
-					busyWorkers.decrementAndGet();
-					waitingForWork.remove(sender);
-					this.notify();
-				}
+				solutions.addAndGet(requestValue);
 			}
 		}
 		else
 		{
 			boards = (ArrayList<Board>)rm.readObject();
-			synchronized (this)
+			rm.finish();
+			synchronized (deque)
 			{
-				synchronized (deque)
+				for (Board b : boards)
 				{
-					for (Board b : boards)
-					{
-						deque.add(b);
-						deque.notify();
-					}
+					deque.add(b);
+					deque.notify();
 				}
-				synchronized (waitingForWork)
-				{
-					waitingForWork.notify();
-				}
-				busyWorkers.decrementAndGet();
-				this.notify();
 			}
-
 		}
 
-		rm.finish();
 		// Get the port to the sender and send the cube
 		Board replyValue = getBoard(); // may block for some time
+		if (replyValue == null)
+		{
+			synchronized (waitingForWork)
+			{
+				waitingForWork.remove(sender);
+			}
+			if (solutions.get() > 0)
+			{
+				synchronized (this)
+				{
+					this.notify();
+				}
+				return;
+			}
+			synchronized (initialBoard)
+			{
+				int bound = initialBoard.bound() + 1;
+				initialBoard.setBound(bound);
+				System.out.print(" " + bound);
+			}
+			replyValue = initialBoard;
+
+		}
 		sendBoard(replyValue, sender);
 
-		// Increase the number of workers we are waiting for
-		busyWorkers.incrementAndGet();
-		waitingForWork.push(sender);
+		waitingForWork.remove(sender);
+	}
+
+	private Board getBoard()
+	{
+		Board board = null;
+		synchronized (deque)
+		{
+			synchronized (waitingForWork)
+			{
+				if (deque.isEmpty() && waitingForWork.size() == senders.size()) //Bound finished and no result found
+					return null;
+			}
+			board = deque.pop();
+		}
+		return board;
+	}
+
+	/**
+	 * Send a cube to a worker.
+	 */
+	private void sendBoard(Board board, IbisIdentifier destination) throws IOException
+	{
+		SendPort port = senders.get(destination);
+		WriteMessage wm = port.newMessage();
+		wm.writeBoolean(false);
+		wm.writeObject(board);
+		wm.finish();
 	}
 
 	/**
@@ -267,37 +250,15 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 		System.out.print("Try bound ");
 		System.out.flush();
+		initialBoard.setBound(bound);
+		deque.addFirst(initialBoard);
 
-		do
+		System.out.print(" " + bound);
+		synchronized (this)
 		{
-			while (!deque.isEmpty())
-				deque.remove();
+			this.wait();
+		}
 
-			initialBoard.setBound(bound);
-			deque.addFirst(initialBoard);
-
-			System.out.println("Bound " + bound);
-
-			while (!deque.isEmpty())
-			{
-				while (waitingForWork.isEmpty())
-				{
-					System.out.println("Waiting for workers to connect");
-					waitForWorkersToConnect();
-				}
-				System.out.println("Workers connected sending board");
-				sendBoard(getBoard(), waitingForWork.pop());
-				while (senders.size() > waitingForWork.size() && deque.isEmpty())
-				{
-					//While some workers are working - wait for them to finish
-					System.out.println("Waiting for answer");
-					waitForWorkersToConnect();
-				}
-			}
-
-			waitForWorkers();
-			bound++;
-		} while (solutions.get() == 0);
 		shutdown();
 
 		System.out.print("\nresult is " + solutions.get() + " solutions of " + initialBoard.bound() + " steps");
@@ -305,49 +266,70 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	}
 
 	/**
-	 * Main function.
-	 *
-	 * @param arguments
-	 *            list of arguments
+	 * Creates a receive port to receive cube requests from workers.
+	 * 
+	 * @throws IOException
 	 */
-	public void run(String fileName) throws IOException, InterruptedException
+	private void openPorts() throws IOException
 	{
-
-		Board initialBoard = null;
-
-		if (fileName == null)
-		{
-			System.err.println("No input file provided.");
-			parent.ibis.registry().terminate();
-			System.exit(1);
-		}
-		else
-		{
-			try
-			{
-				initialBoard = new Board(fileName);
-			}
-			catch (Exception e)
-			{
-				System.err.println("could not initialize board from file: " + e);
-				parent.ibis.registry().terminate();
-				System.exit(1);
-			}
-		}
-		System.out.println("Running IDA*, initial board:");
-		System.out.println(initialBoard);
-
-		// open Ibis ports
-		openPorts();
-
-		// solve
-		long start = System.currentTimeMillis();
-		solve(initialBoard);
-		long end = System.currentTimeMillis();
-
-		// NOTE: this is printed to standard error! The rest of the output is
-		// constant for each set of parameters. Printing this to standard error
-		// makes the output of standard out comparable with "diff"
-		System.err.println("Solving cube took " + (end - start) + " milliseconds");
+		receiver = parent.ibis.createReceivePort(Ida.portType, "server", this, this, new Properties());
+		receiver.enableConnections();
+		receiver.enableMessageUpcalls();
 	}
+
+	/**
+	 * Sends a termination message to all connected workers and closes all
+	 * ports.
+	 * 
+	 * @throws IOException
+	 */
+	private void shutdown() throws IOException
+	{
+		// Terminate the pool
+		parent.ibis.registry().terminate();
+
+		// Close ports (and send termination messages)
+		try
+		{
+			for (SendPort sender : senders.values())
+			{
+				WriteMessage wm = sender.newMessage();
+				wm.writeBoolean(true);
+				wm.finish();
+				sender.close();
+			}
+			receiver.close();
+		}
+		catch (ConnectionClosedException e)
+		{
+			// do nothing
+		}
+	}
+	//do
+	//	{
+	//		while (!deque.isEmpty())
+	//			deque.remove();
+	//
+	//		initialBoard.setBound(bound);
+	//		deque.addFirst(initialBoard);
+	//
+	//		System.out.println("Bound " + bound);
+	//
+	//		while (!deque.isEmpty())
+	//		{
+	//			while (waitingForWork.isEmpty())
+	//			{
+	//				System.out.println("Waiting for workers to connect");
+	//			}
+	//			System.out.println("Workers connected sending board");
+	//			sendBoard(getBoard(), waitingForWork.pop());
+	//			while (senders.size() > waitingForWork.size() && deque.isEmpty())
+	//			{
+	//				//While some workers are working - wait for them to finish
+	//				System.out.println("Waiting for answer");
+	//			}
+	//		}
+	//
+	//		bound++;
+	//	} while (solutions.get() == 0);
 }
