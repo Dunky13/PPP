@@ -211,7 +211,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 			synchronized (initialBoard)
 			{
-				int bound = initialBoard.bound() + 1;
+				int bound = initialBoard.bound();
 				initialBoard.setBound(bound);
 				System.out.print(" " + bound);
 			}
