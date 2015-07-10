@@ -1,38 +1,50 @@
 package ida.ipl;
 
+import java.io.Serializable;
 import ida.ipl.Board.Position;
 
+public class Car implements Serializable
+{
 
-public class Car {
-
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 6844512676383749795L;
 	public Position start = null;
 	public Position end = null;
-	
-	public Car() {}
-	
-	public Car(Car car) {
+
+	public Car()
+	{
+	}
+
+	public Car(Car car)
+	{
 		start = new Position(car.start);
 		end = new Position(car.end);
 	}
-	
-	public void init(Car car) {
+
+	public void init(Car car)
+	{
 		start.init(car.start);
 		end.init(car.end);
 	}
 
-	public boolean isHorizontal() {
+	public boolean isHorizontal()
+	{
 		return start.lin == end.lin;
 	}
-	
-	public void move(int dLin, int dCol) {
+
+	public void move(int dLin, int dCol)
+	{
 		start.lin += dLin;
 		start.col += dCol;
 		end.lin += dLin;
-		end.col +=dCol;
+		end.col += dCol;
 	}
-	
+
 	@Override
-	public String toString() {
+	public String toString()
+	{
 		return "Car [start=" + start + ", end=" + end + ", h=" + isHorizontal() + "]";
 	}
 }
