@@ -232,6 +232,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 						deque.notify();
 					}
 				}
+				synchronized (waitingForWork)
+				{
+					waitingForWork.notify();
+				}
 				busyWorkers.decrementAndGet();
 				this.notify();
 			}
