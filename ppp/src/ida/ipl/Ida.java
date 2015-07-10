@@ -21,7 +21,8 @@ public class Ida
 		PortType.RECEIVE_AUTO_UPCALLS,
 		PortType.CONNECTION_MANY_TO_ONE,
 		PortType.CONNECTION_UPCALLS,
-		PortType.SERIALIZATION_OBJECT);
+		PortType.SERIALIZATION_OBJECT,
+		PortType.COMMUNICATION_NUMBERED);
 
 	public final static IbisCapabilities ibisCapabilities = new IbisCapabilities(
 		IbisCapabilities.ELECTIONS_STRICT,
