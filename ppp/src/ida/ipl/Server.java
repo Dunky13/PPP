@@ -20,22 +20,11 @@ import ibis.ipl.WriteMessage;
 public class Server implements MessageUpcall, ReceivePortConnectUpcall
 {
 
-	private enum Status
-	{
-		INITIALIZING,
-		FILLING_DEQUE,
-		PROCESSING_DEQUE,
-		DEQUE_EMPTY,
-		WAITING_FOR_WORKERS,
-		DONE
-	}
-
 	private final Ida parent;
 	private final HashMap<IbisIdentifier, SendPort> senders;
 	private final Deque<IbisIdentifier> waitingForWork;
 	private ReceivePort receiver;
 	private final Deque<Board> deque;
-	private Status status;
 	private final AtomicInteger busyWorkers;
 	private final AtomicInteger solutions;
 
@@ -46,7 +35,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		waitingForWork = new ArrayDeque<IbisIdentifier>();
 		deque = new ArrayDeque<Board>();
 		busyWorkers = new AtomicInteger(0);
-		status = Status.INITIALIZING;
 		solutions = new AtomicInteger(0);
 	}
 
@@ -71,7 +59,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	public void shutdown() throws IOException
 	{
 		// Terminate the pool
-		status = Status.DONE;
 		parent.ibis.registry().terminate();
 
 		// Close ports (and send termination messages)
@@ -150,7 +137,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 		synchronized (this)
 		{
-			status = Status.WAITING_FOR_WORKERS;
 			while (busyWorkers.get() != 0)
 			{
 				this.wait();
@@ -180,15 +166,11 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			synchronized (deque)
 			{
-				while (status != Status.PROCESSING_DEQUE)
+				while (deque.isEmpty())
 				{
 					deque.wait();
 				}
 				board = deque.pop();
-				if (deque.isEmpty())
-				{
-					status = Status.DEQUE_EMPTY;
-				}
 			}
 		}
 		catch (InterruptedException e)
@@ -242,13 +224,18 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			boards = (ArrayList<Board>)rm.readObject();
 			synchronized (this)
 			{
-				for (Board b : boards)
+				synchronized (deque)
 				{
-					deque.add(b);
+					for (Board b : boards)
+					{
+						deque.add(b);
+						deque.notify();
+					}
 				}
 				busyWorkers.decrementAndGet();
 				this.notify();
 			}
+
 		}
 
 		rm.finish();
@@ -281,8 +268,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			while (!deque.isEmpty())
 				deque.remove();
-
-			status = Status.FILLING_DEQUE;
 
 			initialBoard.setBound(bound);
 			deque.addFirst(initialBoard);
