@@ -272,15 +272,23 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			initialBoard.setBound(bound);
 			deque.addFirst(initialBoard);
 
-			System.out.print(" " + bound);
+			System.out.println("Bound " + bound);
 
 			while (!deque.isEmpty())
 			{
 				while (waitingForWork.isEmpty())
+				{
+					System.out.println("Waiting for workers to connect");
 					waitForWorkersToConnect();
+				}
+				System.out.println("Workers connected sending board");
 				sendBoard(getBoard(), waitingForWork.pop());
-				while (senders.size() > waitingForWork.size() && deque.isEmpty()) //While some workers are working - wait for them to finish
+				while (senders.size() > waitingForWork.size() && deque.isEmpty())
+				{
+					//While some workers are working - wait for them to finish
+					System.out.println("Waiting for answer");
 					waitForWorkersToConnect();
+				}
 			}
 
 			waitForWorkers();

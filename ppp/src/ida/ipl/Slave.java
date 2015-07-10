@@ -76,6 +76,7 @@ public class Slave implements MessageUpcall
 	public void upcall(ReadMessage rm) throws IOException, ClassNotFoundException
 	{
 		// Check whether we should terminate or not
+		System.out.println("Received message");
 		boolean shouldClose = rm.readBoolean();
 		if (shouldClose)
 		{
@@ -85,6 +86,7 @@ public class Slave implements MessageUpcall
 		else
 		{
 			// Process the cube and send back the number of solutions
+			System.out.println("Received board");
 			Board board = (Board)rm.readObject();
 			rm.finish();
 
@@ -98,6 +100,7 @@ public class Slave implements MessageUpcall
 			}
 			else
 			{
+				System.out.println("Sending boards");
 				sendBoards(cache == null ? board.makeMoves() : board.makeMoves(cache));
 			}
 
