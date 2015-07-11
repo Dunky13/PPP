@@ -48,6 +48,7 @@ public class Slave implements MessageUpcall
 		// Check whether we should terminate or not
 		System.out.println("Received message " + rm.sequenceNumber());
 		boolean shouldClose = rm.readBoolean();
+
 		if (shouldClose)
 		{
 			rm.finish();
@@ -55,30 +56,49 @@ public class Slave implements MessageUpcall
 		}
 		else
 		{
+			boolean replyBoard = rm.readBoolean();
 			// Process the cube and send back the number of solutions
 			System.out.println("Received board");
 			Board board = (Board)rm.readObject();
 			rm.finish();
-			calculateJob(board);
+			int solution = calculateJob(board, replyBoard);
+			if (!replyBoard && solution >= 0)
+				sendInt(solution);
 		}
 	}
 
-	private void calculateJob(Board b) throws IOException
+	private int calculateJob(Board b, boolean replyBoard) throws IOException
 	{
 		if (b.distance() == 1)
 		{
 			System.out.println("Found answer");
-			sendInt(1);
+			//sendInt(1);
+			return 1;
 		}
 		else if (b.distance() > b.bound())
 		{
 			System.out.println("Out of bound");
-			sendInt(0);
+			return 0;
+			//sendInt(0);
 		}
 		else
 		{
 			System.out.println("Sending boards");
-			sendBoards(cache == null ? b.makeMoves() : b.makeMoves(cache));
+			ArrayList<Board> boards = cache == null ? b.makeMoves() : b.makeMoves(cache);
+			if (replyBoard)
+			{
+				sendBoards(boards);
+				return -1;
+			}
+			else
+			{
+				int solution = 0;
+				for (Board board : boards)
+				{
+					solution += calculateJob(board, replyBoard);
+				}
+				return solution;
+			}
 		}
 	}
 

@@ -27,6 +27,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private final Deque<Board> deque;
 	private final AtomicInteger solutions;
 	private Board initialBoard;
+	private boolean replyBoards;
 
 	public Server(Ida parent)
 	{
@@ -170,6 +171,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			rm.finish();
 			synchronized (deque)
 			{
+				if (deque.size() > senders.size() * 3)
+					replyBoards = false;
 				for (Board b : boards)
 				{
 					deque.add(b);
@@ -214,6 +217,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				int bound = initialBoard.bound() + 1;
 				initialBoard.setBound(bound);
 				System.out.print(" " + bound);
+				replyBoards = true;
 			}
 			replyValue = initialBoard;
 
@@ -243,6 +247,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		SendPort port = senders.get(destination);
 		WriteMessage wm = port.newMessage();
 		wm.writeBoolean(false);
+		wm.writeBoolean(replyBoards);
 		wm.writeObject(board);
 		wm.finish();
 	}
