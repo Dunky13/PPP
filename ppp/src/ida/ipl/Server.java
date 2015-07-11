@@ -171,7 +171,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			rm.finish();
 			synchronized (deque)
 			{
-				if (deque.size() > senders.size() * 3)
+				if (deque.size() > senders.size() * 1)
 					replyBoards = false;
 				for (Board b : boards)
 				{
