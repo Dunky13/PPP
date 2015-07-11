@@ -58,7 +58,6 @@ public class Slave implements MessageUpcall
 		{
 			boolean replyBoard = rm.readBoolean();
 			// Process the cube and send back the number of solutions
-			System.out.println("Received board");
 			Board board = (Board)rm.readObject();
 			rm.finish();
 			int solution = calculateJob(board, replyBoard);
@@ -71,19 +70,14 @@ public class Slave implements MessageUpcall
 	{
 		if (b.distance() == 1)
 		{
-			System.out.println("Found answer");
-			//sendInt(1);
 			return 1;
 		}
 		else if (b.distance() > b.bound())
 		{
-			System.out.println("Out of bound");
 			return 0;
-			//sendInt(0);
 		}
 		else
 		{
-			System.out.println("Sending boards");
 			ArrayList<Board> boards = cache == null ? b.makeMoves() : b.makeMoves(cache);
 			if (replyBoard)
 			{
