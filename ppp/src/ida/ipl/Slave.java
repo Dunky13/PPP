@@ -46,7 +46,7 @@ public class Slave implements MessageUpcall
 	public void upcall(ReadMessage rm) throws IOException, ClassNotFoundException
 	{
 		// Check whether we should terminate or not
-		System.out.println("Received message " + rm.sequenceNumber());
+		//System.out.println("Received message " + rm.sequenceNumber());
 		boolean shouldClose = rm.readBoolean();
 
 		if (shouldClose)
