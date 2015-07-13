@@ -38,7 +38,7 @@ public class Ida
 			bound++;
 		} while (solutions == 0);
 
-		System.out.print("\nresult is " + solutions + " solutions of " + board.bound() + " steps");
+		System.out.println("\nresult is " + solutions + " solutions of " + board.bound() + " steps");
 		System.out.flush();
 	}
 

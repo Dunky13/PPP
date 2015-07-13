@@ -278,7 +278,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 		shutdown();
 
-		System.out.print("\nresult is " + solutions.get() + " solutions of " + initialBoard.bound() + " steps");
+		System.out.println("\nresult is " + solutions.get() + " solutions of " + initialBoard.bound() + " steps");
 		System.out.flush();
 	}
 
