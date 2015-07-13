@@ -68,7 +68,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				System.exit(1);
 			}
 		}
-		System.out.println("Running IDA* parallel, initial board:");
+		System.out.println("Running IDA*, initial board:");
 		System.out.println(initialBoard);
 
 		// open Ibis ports
@@ -278,7 +278,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 		shutdown();
 
-		System.out.println("\nresult is " + solutions.get() + " solutions of " + initialBoard.bound() + " steps");
+		System.out.print("\nresult is " + solutions.get() + " solutions of " + initialBoard.bound() + " steps");
 		System.out.flush();
 	}
 

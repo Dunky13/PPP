@@ -38,7 +38,7 @@ public class Ida
 			bound++;
 		} while (solutions == 0);
 
-		System.out.println("\nresult is " + solutions + " solutions of " + board.bound() + " steps");
+		System.out.print("\nresult is " + solutions + " solutions of " + board.bound() + " steps");
 		System.out.flush();
 	}
 
@@ -146,7 +146,7 @@ public class Ida
 				System.exit(1);
 			}
 		}
-		System.out.println("Running IDA* sequential, initial board:");
+		System.out.println("Running IDA*, initial board:");
 		System.out.println(initialBoard);
 
 		long start = System.currentTimeMillis();
