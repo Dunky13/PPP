@@ -68,7 +68,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				System.exit(1);
 			}
 		}
-		System.out.println("Running IDA*, initial board:");
+		System.out.println("Running IDA* parallel, initial board:");
 		System.out.println(initialBoard);
 
 		// open Ibis ports
@@ -89,7 +89,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		// NOTE: this is printed to standard error! The rest of the output is
 		// constant for each set of parameters. Printing this to standard error
 		// makes the output of standard out comparable with "diff"
-		System.err.println("Solving cube took " + (end - start) + " milliseconds");
+		System.err.println("Solving IDA took " + (end - start) + " milliseconds");
 	}
 
 	/**
