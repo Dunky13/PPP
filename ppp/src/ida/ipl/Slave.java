@@ -87,9 +87,12 @@ public class Slave implements MessageUpcall
 			else
 			{
 				int solution = 0;
+				int tmpSolution = 0;
 				for (Board board : boards)
 				{
-					solution += calculateJob(board, replyBoard);
+					tmpSolution = calculateJob(board, replyBoard);
+					if (tmpSolution > 0)
+						solution += tmpSolution;
 				}
 				return solution;
 			}
