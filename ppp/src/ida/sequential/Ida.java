@@ -146,7 +146,7 @@ public class Ida
 				System.exit(1);
 			}
 		}
-		System.out.println("Running IDA* seqauential, initial board:");
+		System.out.println("Running IDA* sequential, initial board:");
 		System.out.println(initialBoard);
 
 		long start = System.currentTimeMillis();
