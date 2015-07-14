@@ -254,8 +254,28 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		//		{
 		//			this.wait();
 		//		}
-		while (!finished)
-			calculateJob();
+		Thread t = new Thread(new Runnable()
+		{
+
+			@Override
+			public void run()
+			{
+				try
+				{
+					while (!finished)
+						calculateJob();
+				}
+				catch (IOException e)
+				{
+				}
+			}
+		});
+		t.run();
+		synchronized (this)
+		{
+			this.wait();
+		}
+
 		shutdown();
 
 		System.out.print("\nresult is " + solutions.get() + " solutions of " + initialBoard.bound() + " steps");
