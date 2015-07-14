@@ -191,30 +191,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		waitingForWork.remove(sender);
 	}
 
-	private Board getBoard()
-	{
-		Board board = null;
-		synchronized (deque)
-		{
-			if (deque.isEmpty()) //Bound finished and no result found
-				return null;
-			board = deque.pop();
-		}
-		return board;
-	}
-
-	private void setBoards(ArrayList<Board> boards)
-	{
-		synchronized (deque)
-		{
-			for (Board b : boards)
-			{
-				deque.add(b);
-				deque.notify();
-			}
-		}
-	}
-
 	/**
 	 * Send a cube to a worker.
 	 */
@@ -364,8 +340,9 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			return;
 		if (b.distance() == 1)
 			solutions.addAndGet(1);
-		else if (b.distance() <= b.bound())
-
+		else if (b.distance() > b.bound())
+			solutions.addAndGet(0);
+		else
 		{
 			ArrayList<Board> boards = cache == null ? b.makeMoves() : b.makeMoves(cache);
 			setBoards(boards);
@@ -399,6 +376,30 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			}
 			if (deque.isEmpty() && waitingForWork.size() == senders.size())
 				incrementBound();
+		}
+	}
+
+	private Board getBoard()
+	{
+		Board board = null;
+		synchronized (deque)
+		{
+			if (deque.isEmpty()) //Bound finished and no result found
+				return null;
+			board = deque.pop();
+		}
+		return board;
+	}
+
+	private void setBoards(ArrayList<Board> boards)
+	{
+		synchronized (deque)
+		{
+			for (Board b : boards)
+			{
+				deque.add(b);
+				deque.notify();
+			}
 		}
 	}
 
