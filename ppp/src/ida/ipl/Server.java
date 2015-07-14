@@ -31,7 +31,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private BoardCache cache;
 	private boolean finished;
 	private Server that;
-	private Object lock;
+	private final static Object lock = new Object();
 
 	public Server(Ida parent)
 	{
@@ -42,7 +42,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		solutions = new AtomicInteger(0);
 		finished = false;
 		this.that = this;
-		lock = new Object();
 	}
 
 	/**
