@@ -13,6 +13,8 @@ import ibis.ipl.WriteMessage;
 public class Slave implements MessageUpcall
 {
 
+	public static final int SENT_BOARD = -1;
+	public static final int NO_BOARD = -2;
 	private final Ida parent;
 	private BoardCache cache;
 	private ReceivePort masterReceived;
@@ -59,7 +61,7 @@ public class Slave implements MessageUpcall
 			rm.finish();
 			if (board == null) //prevent null pointer exceptions 
 			{
-				sendInt(0);
+				sendInt(Slave.NO_BOARD);
 				return;
 			}
 			int solution = calculateJob(board, replyBoard);
@@ -84,7 +86,7 @@ public class Slave implements MessageUpcall
 			if (replyBoard)
 			{
 				sendBoards(boards);
-				return -1;
+				return Slave.SENT_BOARD;
 			}
 			else
 			{

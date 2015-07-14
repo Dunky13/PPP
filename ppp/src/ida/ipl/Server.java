@@ -167,7 +167,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			requestValue = rm.readInt();
 			rm.finish();
-			if (requestValue != Ida.INIT_VALUE) //Solution received
+			if (requestValue != Ida.INIT_VALUE && requestValue != Slave.NO_BOARD) //Solution received
 			{
 				solutions.addAndGet(requestValue);
 			}
@@ -246,21 +246,26 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 						synchronized (deque)
 						{
-							if (!finished && deque.isEmpty() && solutions.get() == 0)
-								incrementBound();
-							System.err.println("Dequeue size: " + deque.size() + " Solution size: " + solutions.get());
+							if (finished || deque.isEmpty() && solutions.get() > 0 && waitingForWork.size() == senders.size())
+								break;
+							//							System.err.println("Dequeue size: " + deque.size() + " Solution size: " + solutions.get());
 						}
 					}
+
 				}
 				catch (IOException e)
 				{
 				}
+				synchronized (that)
+				{
+					that.notify();
+				}
 			}
 		});
 		t.run();
-		synchronized (this.that)
+		synchronized (that)
 		{
-			this.wait();
+			that.wait();
 		}
 
 		shutdown();
@@ -345,7 +350,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			finished = true;
 
-			synchronized (this.that)
+			synchronized (that)
 			{
 				this.notify();
 			}
@@ -456,7 +461,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 		if (solutions.get() > 0)
 		{
-			synchronized (this.that)
+			synchronized (that)
 			{
 				this.notify();
 				this.finished = true;
