@@ -30,6 +30,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private boolean replyBoards;
 	private BoardCache cache;
 	private boolean finished;
+	private Server that;
 
 	public Server(Ida parent)
 	{
@@ -39,6 +40,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		deque = new ArrayDeque<Board>();
 		solutions = new AtomicInteger(0);
 		finished = false;
+		this.that = this;
 	}
 
 	/**
@@ -256,7 +258,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			}
 		});
 		t.run();
-		synchronized (this)
+		synchronized (this.that)
 		{
 			this.wait();
 		}
@@ -343,7 +345,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			finished = true;
 
-			synchronized (this)
+			synchronized (this.that)
 			{
 				this.notify();
 			}
@@ -454,7 +456,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 		if (solutions.get() > 0)
 		{
-			synchronized (this)
+			synchronized (this.that)
 			{
 				this.notify();
 				this.finished = true;
