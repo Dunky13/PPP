@@ -183,8 +183,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 
 		Board replyValue = getBoardAfterWait(); // may block for some time
-		if (replyValue == null)
-			return;
+		//		if (replyValue == null)
+		//			return;
 		// Get the port to the sender and send the cube
 		sendBoard(replyValue, sender);
 
