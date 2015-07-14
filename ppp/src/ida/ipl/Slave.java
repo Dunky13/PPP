@@ -60,6 +60,11 @@ public class Slave implements MessageUpcall
 			// Process the cube and send back the number of solutions
 			Board board = (Board)rm.readObject();
 			rm.finish();
+			if (board == null)
+			{
+				sendInt(0);
+				return;
+			}
 			int solution = calculateJob(board, replyBoard);
 			if (!replyBoard && solution >= 0)
 				sendInt(solution);
