@@ -19,29 +19,117 @@ import ibis.ipl.WriteMessage;
 
 public class Server implements MessageUpcall, ReceivePortConnectUpcall
 {
+	class SharedData
+	{
+		private final Ida parent;
+		private final HashMap<IbisIdentifier, SendPort> senders;
+		private final Deque<IbisIdentifier> waitingForWork;
+		private ReceivePort receiver;
+		private final Deque<Board> deque;
+		private final AtomicInteger solutions;
+		private Board initialBoard;
+		private boolean replyBoards;
+		private BoardCache cache;
+		private boolean finished;
 
-	private final Ida parent;
-	private final HashMap<IbisIdentifier, SendPort> senders;
-	private final Deque<IbisIdentifier> waitingForWork;
-	private ReceivePort receiver;
-	private final Deque<Board> deque;
-	private final AtomicInteger solutions;
-	private Board initialBoard;
-	private boolean replyBoards;
-	private BoardCache cache;
-	private boolean finished;
-	private Server that;
+		public SharedData(Ida parent)
+		{
+			this.parent = parent;
+			this.senders = new HashMap<IbisIdentifier, SendPort>();
+			this.waitingForWork = new ArrayDeque<IbisIdentifier>();
+			this.deque = new ArrayDeque<Board>();
+			this.solutions = new AtomicInteger(0);
+			this.finished = false;
+		}
+
+		public Ida getParent()
+		{
+			return parent;
+		}
+
+		public HashMap<IbisIdentifier, SendPort> getSenders()
+		{
+			return senders;
+		}
+
+		public Deque<IbisIdentifier> getWaitingForWork()
+		{
+			return waitingForWork;
+		}
+
+		public ReceivePort getReceiver()
+		{
+			return receiver;
+		}
+
+		public Deque<Board> getDeque()
+		{
+			return deque;
+		}
+
+		public AtomicInteger getSolutions()
+		{
+			return solutions;
+		}
+
+		public Board getInitialBoard()
+		{
+			return initialBoard;
+		}
+
+		public boolean isReplyBoards()
+		{
+			return replyBoards;
+		}
+
+		public BoardCache getCache()
+		{
+			return cache;
+		}
+
+		public boolean isFinished()
+		{
+			return finished;
+		}
+
+		public void setReceiver(ReceivePort receiver)
+		{
+			this.receiver = receiver;
+		}
+
+		public void setInitialBoard(Board initialBoard)
+		{
+			this.initialBoard = initialBoard;
+		}
+
+		public void setReplyBoards(boolean replyBoards)
+		{
+			this.replyBoards = replyBoards;
+		}
+
+		public void setCache(BoardCache cache)
+		{
+			this.cache = cache;
+		}
+
+		public void setFinished(boolean finished)
+		{
+			this.finished = finished;
+		}
+
+		public boolean useCache()
+		{
+			return this.cache != null;
+		}
+	}
+
 	private final static Object lock = new Object();
+
+	private final SharedData data;
 
 	public Server(Ida parent)
 	{
-		this.parent = parent;
-		senders = new HashMap<IbisIdentifier, SendPort>();
-		waitingForWork = new ArrayDeque<IbisIdentifier>();
-		deque = new ArrayDeque<Board>();
-		solutions = new AtomicInteger(0);
-		finished = false;
-		this.that = this;
+		this.data = new SharedData(parent);
 	}
 
 	/**
@@ -53,31 +141,29 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	public void run(String fileName, boolean useCache) throws IOException
 	{
 
-		initialBoard = null;
-
 		if (fileName == null)
 		{
 			System.err.println("No input file provided.");
-			parent.ibis.registry().terminate();
+			data.getParent().ibis.registry().terminate();
 			System.exit(1);
 		}
 		else
 		{
 			try
 			{
-				initialBoard = new Board(fileName);
+				data.setInitialBoard(new Board(fileName));
 			}
 			catch (Exception e)
 			{
 				System.err.println("could not initialize board from file: " + e);
-				parent.ibis.registry().terminate();
+				data.getParent().ibis.registry().terminate();
 				System.exit(1);
 			}
 		}
 		if (useCache)
-			cache = new BoardCache();
+			data.setCache(new BoardCache());
 		System.out.println("Running IDA*, initial board:");
-		System.out.println(initialBoard);
+		System.out.println(data.getInitialBoard());
 
 		// open Ibis ports
 		openPorts();
@@ -86,7 +172,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		long start = System.currentTimeMillis();
 		try
 		{
-			solve(initialBoard);
+			solve(data.getInitialBoard());
 		}
 		catch (InterruptedException e)
 		{
@@ -110,13 +196,13 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		try
 		{
 			IbisIdentifier worker = spi.ibisIdentifier();
-			SendPort sender = parent.ibis.createSendPort(Ida.portType);
+			SendPort sender = data.getParent().ibis.createSendPort(Ida.portType);
 			sender.connect(worker, "slave");
-			senders.put(worker, sender);
-			synchronized (waitingForWork)
+			data.getSenders().put(worker, sender);
+			synchronized (data.getWaitingForWork())
 			{
-				waitingForWork.push(worker);
-				waitingForWork.notifyAll();
+				data.getWaitingForWork().push(worker);
+				data.getWaitingForWork().notifyAll();
 			}
 		}
 		catch (IOException e)
@@ -136,9 +222,9 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		try
 		{
 			IbisIdentifier worker = spi.ibisIdentifier();
-			SendPort sender = senders.get(worker);
+			SendPort sender = data.getSenders().get(worker);
 			sender.close();
-			senders.remove(worker);
+			data.getSenders().remove(worker);
 		}
 		catch (ConnectionClosedException e)
 		{
@@ -163,14 +249,14 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		ArrayList<Board> boards = null;
 		boolean recvInt = rm.readBoolean();
 
-		waitingForWork.add(sender);
+		data.getWaitingForWork().add(sender);
 		if (recvInt)
 		{
 			requestValue = rm.readInt();
 			rm.finish();
 			if (requestValue != Ida.INIT_VALUE && requestValue != Slave.NO_BOARD) //Solution received
 			{
-				solutions.addAndGet(requestValue);
+				data.getSolutions().addAndGet(requestValue);
 			}
 		}
 		else
@@ -178,10 +264,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			boards = (ArrayList<Board>)rm.readObject();
 			rm.finish();
 			setBoards(boards);
-			synchronized (deque)
+			synchronized (data.getDeque())
 			{
-				if (deque.size() > 1) //senders.size() * 2)
-					replyBoards = false;
+				if (data.getDeque().size() > 1) //senders.size() * 2)
+					data.setReplyBoards(false);
 			}
 		}
 
@@ -191,7 +277,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		// Get the port to the sender and send the cube
 		sendBoard(replyValue, sender);
 
-		waitingForWork.remove(sender);
+		data.getWaitingForWork().remove(sender);
 	}
 
 	/**
@@ -199,10 +285,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 */
 	private void sendBoard(Board board, IbisIdentifier destination) throws IOException
 	{
-		SendPort port = senders.get(destination);
+		SendPort port = data.getSenders().get(destination);
 		WriteMessage wm = port.newMessage();
 		wm.writeBoolean(false);
-		wm.writeBoolean(replyBoards);
+		wm.writeBoolean(data.isReplyBoards());
 		wm.writeObject(board);
 		wm.finish();
 	}
@@ -223,9 +309,9 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		System.out.print("Try bound ");
 		System.out.flush();
 		initialBoard.setBound(bound);
-		synchronized (deque)
+		synchronized (data.getDeque())
 		{
-			deque.addFirst(initialBoard);
+			data.getDeque().addFirst(initialBoard);
 		}
 
 		System.out.print(" " + bound);
@@ -241,7 +327,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			{
 				try
 				{
-					while (!finished)
+					while (!data.isFinished())
 					{
 						calculateJob();
 
@@ -273,7 +359,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 		shutdown();
 
-		System.out.print("\nresult is " + solutions.get() + " solutions of " + initialBoard.bound() + " steps");
+		System.out.print("\nresult is " + data.getSolutions().get() + " solutions of " + data.getInitialBoard().bound() + " steps");
 		System.out.flush();
 	}
 
@@ -284,9 +370,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 */
 	private void openPorts() throws IOException
 	{
-		receiver = parent.ibis.createReceivePort(Ida.portType, "server", this, this, new Properties());
+		ReceivePort receiver = data.getParent().ibis.createReceivePort(Ida.portType, "server", this, this, new Properties());
 		receiver.enableConnections();
 		receiver.enableMessageUpcalls();
+		data.setReceiver(receiver);
 	}
 
 	/**
@@ -298,19 +385,19 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private void shutdown() throws IOException
 	{
 		// Terminate the pool
-		parent.ibis.registry().terminate();
+		data.getParent().ibis.registry().terminate();
 
 		// Close ports (and send termination messages)
 		try
 		{
-			for (SendPort sender : senders.values())
+			for (SendPort sender : data.getSenders().values())
 			{
 				WriteMessage wm = sender.newMessage();
 				wm.writeBoolean(true);
 				wm.finish();
 				sender.close();
 			}
-			receiver.close();
+			data.getReceiver().close();
 		}
 		catch (ConnectionClosedException e)
 		{
@@ -351,7 +438,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		Board b = getBoardAfterWait();
 		if (b == null)
 		{
-			finished = true;
+			data.setFinished(true);
 
 			synchronized (lock)
 			{
@@ -362,7 +449,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 		int solution = calcJob(b);
 		if (solution > 0)
-			solutions.addAndGet(solution);
+			data.getSolutions().addAndGet(solution);
 		//		if (b == null)
 		//			return;
 		//		if (b.distance() == 1)
@@ -386,10 +473,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			return 0;
 		else
 		{
-			ArrayList<Board> boards = cache == null ? b.makeMoves() : b.makeMoves(cache);
-			synchronized (deque)
+			ArrayList<Board> boards = data.useCache() ? b.makeMoves() : b.makeMoves(data.getCache());
+			synchronized (data.getDeque())
 			{
-				if (deque.size() < 10)
+				if (data.getDeque().size() < 10)
 				{
 					Board b3 = boards.remove(0);
 					setBoards(boards);
@@ -408,30 +495,30 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 	private Board getBoardAfterWait()
 	{
-		if (finished)
+		if (data.isFinished())
 			return null;
 		Board b = null;
 		do
 			waitForQueue();
-		while ((b = getBoard()) == null && !finished);
+		while ((b = getBoard()) == null && !data.isFinished());
 		return b;
 	}
 
 	private void waitForQueue()
 	{
-		synchronized (deque)
+		synchronized (data.getDeque())
 		{
-			while (deque.isEmpty() && waitingForWork.size() < senders.size())
+			while (data.getDeque().isEmpty() && data.getWaitingForWork().size() < data.getSenders().size())
 			{
 				try
 				{
-					deque.wait(100);
+					data.getDeque().wait(100);
 				}
 				catch (InterruptedException e)
 				{
 				}
 			}
-			if (deque.isEmpty() && waitingForWork.size() == senders.size())
+			if (data.getDeque().isEmpty() && data.getWaitingForWork().size() == data.getSenders().size())
 				incrementBound();
 		}
 	}
@@ -439,50 +526,50 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private Board getBoard()
 	{
 		Board board = null;
-		synchronized (deque)
+		synchronized (data.getDeque())
 		{
-			if (deque.isEmpty()) //Bound finished and no result found
+			if (data.getDeque().isEmpty()) //Bound finished and no result found
 				return null;
-			board = deque.pop();
+			board = data.getDeque().pop();
 		}
 		return board;
 	}
 
 	private void setBoards(ArrayList<Board> boards)
 	{
-		synchronized (deque)
+		synchronized (data.getDeque())
 		{
 			for (Board b : boards)
 			{
-				deque.add(b);
-				deque.notify();
+				data.getDeque().add(b);
+				data.getDeque().notify();
 			}
 		}
 	}
 
 	private void incrementBound()
 	{
-		if (solutions.get() > 0)
+		if (data.getSolutions().get() > 0)
 		{
 			synchronized (lock)
 			{
 				lock.notifyAll();
-				that.finished = true;
+				data.setFinished(true);
 			}
 			return;
 		}
 
-		synchronized (initialBoard)
+		synchronized (data.getInitialBoard())
 		{
-			synchronized (deque)
+			synchronized (data.getDeque())
 			{
-				if (!deque.isEmpty())
+				if (!data.getDeque().isEmpty())
 					return;
-				int bound = initialBoard.bound() + 1;
-				initialBoard.setBound(bound);
+				int bound = data.getInitialBoard().bound() + 1;
+				data.getInitialBoard().setBound(bound);
 				System.out.print(" " + bound);
-				deque.add(initialBoard);
-				replyBoards = true;
+				data.getDeque().add(data.getInitialBoard());
+				data.setReplyBoards(true);
 			}
 		}
 	}
