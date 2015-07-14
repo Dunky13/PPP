@@ -332,20 +332,23 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private void calculateJob() throws IOException
 	{
 		if (this.finished)
+		{
+			System.out.println("I think I'm finished...");
 			return;
+		}
 		Board b = null;
 		while ((b = getBoard()) == null)
 			waitForQueue();
 		if (b.distance() == 1)
 			solutions.addAndGet(1);
 		else if (b.distance() > b.bound())
-			return;
+			calculateJob();
 		else
 		{
 			ArrayList<Board> boards = cache == null ? b.makeMoves() : b.makeMoves(cache);
 			setBoards(boards);
-			calculateJob();
 		}
+		calculateJob();
 	}
 
 	private void waitForQueue()
