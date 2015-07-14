@@ -254,7 +254,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		//		{
 		//			this.wait();
 		//		}
-		calculateJob();
+		while (!finished)
+			calculateJob();
 		shutdown();
 
 		System.out.print("\nresult is " + solutions.get() + " solutions of " + initialBoard.bound() + " steps");
@@ -331,11 +332,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 	private void calculateJob() throws IOException
 	{
-		if (this.finished)
-		{
-			System.out.println("I think I'm finished...");
-			return;
-		}
+
 		Board b = null;
 		while ((b = getBoard()) == null)
 			waitForQueue();
@@ -347,7 +344,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			ArrayList<Board> boards = cache == null ? b.makeMoves() : b.makeMoves(cache);
 			setBoards(boards);
 		}
-		calculateJob();
 	}
 
 	private void waitForQueue()
