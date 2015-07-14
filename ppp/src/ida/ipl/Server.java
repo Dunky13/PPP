@@ -241,10 +241,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 					while (!finished)
 					{
 						calculateJob();
-						synchronized (deque)
-						{
-							System.err.println("Dequeue size: " + deque.size() + " Solution size: " + solutions.get());
-						}
+						//						synchronized (deque)
+						//						{
+						//							System.err.println("Dequeue size: " + deque.size() + " Solution size: " + solutions.get());
+						//						}
 					}
 				}
 				catch (IOException e)
