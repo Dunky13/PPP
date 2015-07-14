@@ -28,6 +28,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private final AtomicInteger solutions;
 	private Board initialBoard;
 	private boolean replyBoards;
+	private BoardCache cache;
+	private boolean finished;
 
 	public Server(Ida parent)
 	{
@@ -36,6 +38,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		waitingForWork = new ArrayDeque<IbisIdentifier>();
 		deque = new ArrayDeque<Board>();
 		solutions = new AtomicInteger(0);
+		finished = false;
 	}
 
 	/**
@@ -44,7 +47,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 * @param arguments
 	 *            list of arguments
 	 */
-	public void run(String fileName) throws IOException
+	public void run(String fileName, boolean useCache) throws IOException
 	{
 
 		initialBoard = null;
@@ -68,6 +71,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				System.exit(1);
 			}
 		}
+		if (useCache)
+			cache = new BoardCache();
 		System.out.println("Running IDA*, initial board:");
 		System.out.println(initialBoard);
 
@@ -169,59 +174,18 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			boards = (ArrayList<Board>)rm.readObject();
 			rm.finish();
+			setBoards(boards);
 			synchronized (deque)
 			{
-				if (deque.size() > senders.size() * 2)
+				if (deque.size() > 1) //senders.size() * 2)
 					replyBoards = false;
-				for (Board b : boards)
-				{
-					deque.add(b);
-					deque.notify();
-				}
 			}
 		}
 
-		synchronized (deque)
-		{
-			while (deque.isEmpty() && waitingForWork.size() < senders.size())
-			{
-				try
-				{
-					deque.wait();
-				}
-				catch (InterruptedException e)
-				{
-				}
-			}
-		}
+		waitForQueue();
 
 		// Get the port to the sender and send the cube
 		Board replyValue = getBoard(); // may block for some time
-		if (replyValue == null)
-		{
-			synchronized (waitingForWork)
-			{
-				waitingForWork.remove(sender);
-			}
-			if (solutions.get() > 0)
-			{
-				synchronized (this)
-				{
-					this.notify();
-				}
-				return;
-			}
-
-			synchronized (initialBoard)
-			{
-				int bound = initialBoard.bound() + 1;
-				initialBoard.setBound(bound);
-				System.out.print(" " + bound);
-				replyBoards = true;
-			}
-			replyValue = initialBoard;
-
-		}
 		sendBoard(replyValue, sender);
 
 		waitingForWork.remove(sender);
@@ -237,6 +201,18 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			board = deque.pop();
 		}
 		return board;
+	}
+
+	private void setBoards(ArrayList<Board> boards)
+	{
+		synchronized (deque)
+		{
+			for (Board b : boards)
+			{
+				deque.add(b);
+				deque.notify();
+			}
+		}
 	}
 
 	/**
@@ -271,11 +247,11 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		deque.addFirst(initialBoard);
 
 		System.out.print(" " + bound);
-		synchronized (this)
-		{
-			this.wait();
-		}
-
+		//		synchronized (this)
+		//		{
+		//			this.wait();
+		//		}
+		calculateJob();
 		shutdown();
 
 		System.out.print("\nresult is " + solutions.get() + " solutions of " + initialBoard.bound() + " steps");
@@ -349,4 +325,68 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	//
 	//		bound++;
 	//	} while (solutions.get() == 0);
+
+	private void calculateJob() throws IOException
+	{
+		if (this.finished)
+			return;
+		waitForQueue();
+		Board b = getBoard();
+		if (b.distance() == 1)
+			solutions.addAndGet(1);
+		else if (b.distance() > b.bound())
+			return;
+		else
+		{
+			ArrayList<Board> boards = cache == null ? b.makeMoves() : b.makeMoves(cache);
+			setBoards(boards);
+			calculateJob();
+		}
+	}
+
+	private void waitForQueue()
+	{
+		synchronized (deque)
+		{
+			while (deque.isEmpty() && waitingForWork.size() < senders.size())
+			{
+				try
+				{
+					deque.wait();
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+			if (deque.isEmpty() && waitingForWork.size() == senders.size())
+				incrementBound();
+		}
+	}
+
+	private void incrementBound()
+	{
+		if (solutions.get() > 0)
+		{
+			synchronized (this)
+			{
+				this.notify();
+				this.finished = true;
+			}
+			return;
+		}
+
+		synchronized (initialBoard)
+		{
+			synchronized (deque)
+			{
+				if (!deque.isEmpty())
+					return;
+				int bound = initialBoard.bound() + 1;
+				initialBoard.setBound(bound);
+				System.out.print(" " + bound);
+				deque.add(initialBoard);
+				replyBoards = true;
+			}
+		}
+	}
 }

@@ -67,7 +67,7 @@ public class Ida
 		// If I am the master, run master, else run worker
 		if (master.equals(ibis.identifier()))
 		{
-			new Server(this).run(fileName);
+			new Server(this).run(fileName, useCache);
 		}
 		else
 		{
