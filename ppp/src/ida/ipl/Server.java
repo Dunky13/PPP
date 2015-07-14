@@ -263,7 +263,13 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				try
 				{
 					while (!finished)
+					{
 						calculateJob();
+						synchronized (deque)
+						{
+							System.err.println("Dequeue size: " + deque.size());
+						}
+					}
 				}
 				catch (IOException e)
 				{
