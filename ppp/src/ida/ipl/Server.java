@@ -247,7 +247,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 						synchronized (deque)
 						{
 							if (finished || deque.isEmpty() && solutions.get() > 0 && waitingForWork.size() == senders.size())
+							{
+								finished = true;
 								break;
+							}
 							//							System.err.println("Dequeue size: " + deque.size() + " Solution size: " + solutions.get());
 						}
 					}
@@ -258,7 +261,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				}
 				synchronized (that)
 				{
-					that.notify();
+					System.err.println("Trying to notify");
+					that.notifyAll();
 				}
 			}
 		});
