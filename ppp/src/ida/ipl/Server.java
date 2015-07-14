@@ -355,6 +355,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 	private int calcJob(Board b)
 	{
+		if (b == null)
+			return 0;
 		if (b.distance() == 1)
 			return 1;
 		else if (b.distance() > b.bound())
