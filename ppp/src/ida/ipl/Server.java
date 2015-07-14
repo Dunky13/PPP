@@ -341,9 +341,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			waitForQueue();
 		if (b.distance() == 1)
 			solutions.addAndGet(1);
-		else if (b.distance() > b.bound())
-			calculateJob();
-		else
+		else if (b.distance() <= b.bound())
+
 		{
 			ArrayList<Board> boards = cache == null ? b.makeMoves() : b.makeMoves(cache);
 			setBoards(boards);
