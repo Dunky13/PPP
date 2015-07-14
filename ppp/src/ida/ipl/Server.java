@@ -339,16 +339,45 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 
 		Board b = getBoardAfterWait();
-		if (b == null)
-			return;
+		solutions.addAndGet(calcJob(b));
+		//		if (b == null)
+		//			return;
+		//		if (b.distance() == 1)
+		//			solutions.addAndGet(1);
+		//		else if (b.distance() > b.bound())
+		//			solutions.addAndGet(0);
+		//		else
+		//		{
+		//			ArrayList<Board> boards = cache == null ? b.makeMoves() : b.makeMoves(cache);
+		//			setBoards(boards);
+		//		}
+	}
+
+	private int calcJob(Board b)
+	{
 		if (b.distance() == 1)
-			solutions.addAndGet(1);
+			return 1;
 		else if (b.distance() > b.bound())
-			solutions.addAndGet(0);
+			return 0;
 		else
 		{
 			ArrayList<Board> boards = cache == null ? b.makeMoves() : b.makeMoves(cache);
-			setBoards(boards);
+			synchronized (deque)
+			{
+				if (deque.size() < 10)
+				{
+					Board b3 = boards.remove(0);
+					setBoards(boards);
+					return calcJob(b3);
+				}
+				else
+				{
+					int result = 0;
+					for (Board b2 : boards)
+						result += calcJob(b2);
+					return result;
+				}
+			}
 		}
 	}
 
