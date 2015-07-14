@@ -242,7 +242,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 					{
 						calculateJob();
 
-						if (deque.size() == 0 && solutions.get() == 0)
+						if (!finished && deque.size() == 0 && solutions.get() == 0)
 							incrementBound();
 						//						synchronized (deque)
 						//						{
@@ -339,7 +339,20 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 
 		Board b = getBoardAfterWait();
-		solutions.addAndGet(calcJob(b));
+		if (b == null)
+		{
+			finished = true;
+
+			synchronized (this)
+			{
+				this.notify();
+			}
+
+			return;
+		}
+		int solution = calcJob(b);
+		if (solution > 0)
+			solutions.addAndGet(solution);
 		//		if (b == null)
 		//			return;
 		//		if (b.distance() == 1)
@@ -356,7 +369,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private int calcJob(Board b)
 	{
 		if (b == null)
-			return 0;
+			return -1;
 		if (b.distance() == 1)
 			return 1;
 		else if (b.distance() > b.bound())
