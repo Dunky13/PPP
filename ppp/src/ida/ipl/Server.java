@@ -266,7 +266,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				}
 			}
 		});
-		t.run();
+		t.start();
 		synchronized (lock)
 		{
 			lock.wait();
