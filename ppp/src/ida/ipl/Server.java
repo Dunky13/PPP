@@ -31,6 +31,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private BoardCache cache;
 	private boolean finished;
 	private Server that;
+	private Object lock;
 
 	public Server(Ida parent)
 	{
@@ -41,6 +42,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		solutions = new AtomicInteger(0);
 		finished = false;
 		this.that = this;
+		lock = new Object();
 	}
 
 	/**
@@ -259,16 +261,16 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				catch (IOException e)
 				{
 				}
-				synchronized (that)
+				synchronized (lock)
 				{
-					that.notifyAll();
+					lock.notify();
 				}
 			}
 		});
 		t.run();
-		synchronized (that)
+		synchronized (lock)
 		{
-			that.wait();
+			lock.wait();
 		}
 
 		System.err.println("Shutting down, or so I think");
@@ -354,9 +356,9 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			finished = true;
 
-			synchronized (that)
+			synchronized (lock)
 			{
-				this.notify();
+				lock.notify();
 			}
 
 			return;
@@ -465,10 +467,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 		if (solutions.get() > 0)
 		{
-			synchronized (that)
+			synchronized (lock)
 			{
-				this.notify();
-				this.finished = true;
+				lock.notify();
+				that.finished = true;
 			}
 			return;
 		}
