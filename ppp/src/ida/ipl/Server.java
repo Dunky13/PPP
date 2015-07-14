@@ -182,13 +182,21 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			}
 		}
 
-		waitForQueue();
+		Board replyValue = getBoardAfterWait(); // may block for some time
 
 		// Get the port to the sender and send the cube
-		Board replyValue = getBoard(); // may block for some time
 		sendBoard(replyValue, sender);
 
 		waitingForWork.remove(sender);
+	}
+
+	private Board getBoardAfterWait()
+	{
+		Board b;
+		do
+			waitForQueue();
+		while ((b = getBoard()) == null);
+		return b;
 	}
 
 	private Board getBoard()
@@ -333,9 +341,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private void calculateJob() throws IOException
 	{
 
-		Board b = null;
-		while ((b = getBoard()) == null)
-			waitForQueue();
+		Board b = getBoardAfterWait();
 		if (b.distance() == 1)
 			solutions.addAndGet(1);
 		else if (b.distance() <= b.bound())
