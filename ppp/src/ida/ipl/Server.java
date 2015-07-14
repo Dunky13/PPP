@@ -245,25 +245,24 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 					{
 						calculateJob();
 
-						synchronized (deque)
-						{
-							if (finished || deque.isEmpty() && solutions.get() > 0 && waitingForWork.size() == senders.size())
-							{
-								finished = true;
-								break;
-							}
-							//							System.err.println("Dequeue size: " + deque.size() + " Solution size: " + solutions.get());
-						}
+						//						synchronized (deque)
+						//						{
+						//							if (finished || deque.isEmpty() && solutions.get() > 0 && waitingForWork.size() == senders.size())
+						//							{
+						//								finished = true;
+						//								break;
+						//							}
+						//						}
 					}
 
 				}
 				catch (IOException e)
 				{
 				}
-				synchronized (lock)
-				{
-					lock.notifyAll();
-				}
+				//				synchronized (lock)
+				//				{
+				//					lock.notifyAll();
+				//				}
 			}
 		});
 		t.start();
@@ -272,7 +271,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			lock.wait();
 		}
 
-		System.err.println("Shutting down, or so I think");
 		shutdown();
 
 		System.out.print("\nresult is " + solutions.get() + " solutions of " + initialBoard.bound() + " steps");
