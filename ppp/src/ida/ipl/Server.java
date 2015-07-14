@@ -261,7 +261,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				}
 				synchronized (that)
 				{
-					System.err.println("Trying to notify");
 					that.notifyAll();
 				}
 			}
@@ -272,6 +271,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			that.wait();
 		}
 
+		System.err.println("Shutting down, or so I think");
 		shutdown();
 
 		System.out.print("\nresult is " + solutions.get() + " solutions of " + initialBoard.bound() + " steps");
