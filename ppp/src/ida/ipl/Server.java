@@ -267,7 +267,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 						calculateJob();
 						synchronized (deque)
 						{
-							System.err.println("Dequeue size: " + deque.size());
+							System.err.println("Dequeue size: " + deque.size() + " Solution size: " + solutions.get());
 						}
 					}
 				}
