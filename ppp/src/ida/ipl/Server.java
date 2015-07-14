@@ -262,7 +262,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				}
 				synchronized (lock)
 				{
-					lock.notify();
+					lock.notifyAll();
 				}
 			}
 		});
@@ -357,7 +357,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 			synchronized (lock)
 			{
-				lock.notify();
+				lock.notifyAll();
 			}
 
 			return;
@@ -468,7 +468,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			synchronized (lock)
 			{
-				lock.notify();
+				lock.notifyAll();
 				that.finished = true;
 			}
 			return;
