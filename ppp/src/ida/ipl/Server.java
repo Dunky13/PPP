@@ -244,7 +244,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		System.out.print("Try bound ");
 		System.out.flush();
 		initialBoard.setBound(bound);
-		deque.addFirst(initialBoard);
+		synchronized (deque)
+		{
+			deque.addFirst(initialBoard);
+		}
 
 		System.out.print(" " + bound);
 		//		synchronized (this)
@@ -330,8 +333,9 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 		if (this.finished)
 			return;
-		waitForQueue();
-		Board b = getBoard();
+		Board b = null;
+		while ((b = getBoard()) == null)
+			waitForQueue();
 		if (b.distance() == 1)
 			solutions.addAndGet(1);
 		else if (b.distance() > b.bound())
