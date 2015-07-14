@@ -183,20 +183,12 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 
 		Board replyValue = getBoardAfterWait(); // may block for some time
-
+		if (replyValue == null)
+			return;
 		// Get the port to the sender and send the cube
 		sendBoard(replyValue, sender);
 
 		waitingForWork.remove(sender);
-	}
-
-	private Board getBoardAfterWait()
-	{
-		Board b;
-		do
-			waitForQueue();
-		while ((b = getBoard()) == null);
-		return b;
 	}
 
 	private Board getBoard()
@@ -342,6 +334,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 
 		Board b = getBoardAfterWait();
+		if (b == null)
+			return;
 		if (b.distance() == 1)
 			solutions.addAndGet(1);
 		else if (b.distance() <= b.bound())
@@ -352,6 +346,17 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 	}
 
+	private Board getBoardAfterWait()
+	{
+		if (finished)
+			return null;
+		Board b = null;
+		do
+			waitForQueue();
+		while ((b = getBoard()) == null && !finished);
+		return b;
+	}
+
 	private void waitForQueue()
 	{
 		synchronized (deque)
@@ -360,7 +365,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			{
 				try
 				{
-					deque.wait();
+					deque.wait(100);
 				}
 				catch (InterruptedException e)
 				{

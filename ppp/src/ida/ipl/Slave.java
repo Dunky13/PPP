@@ -45,8 +45,6 @@ public class Slave implements MessageUpcall
 	@Override
 	public void upcall(ReadMessage rm) throws IOException, ClassNotFoundException
 	{
-		// Check whether we should terminate or not
-		//System.out.println("Received message " + rm.sequenceNumber());
 		boolean shouldClose = rm.readBoolean();
 
 		if (shouldClose)
@@ -57,10 +55,9 @@ public class Slave implements MessageUpcall
 		else
 		{
 			boolean replyBoard = rm.readBoolean();
-			// Process the cube and send back the number of solutions
 			Board board = (Board)rm.readObject();
 			rm.finish();
-			if (board == null)
+			if (board == null) //prevent null pointer exceptions 
 			{
 				sendInt(0);
 				return;
