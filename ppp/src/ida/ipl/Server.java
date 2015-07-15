@@ -178,10 +178,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		data.setInitialBoard(initialBoard);
 
 		System.out.print(" " + bound);
-		//		synchronized (this)
-		//		{
-		//			this.wait();
-		//		}
+
+		//Run the solving on server side in a seperate thread so it does not block upcalls or the lock that waits until ALL calculations are finished.
 		Thread t = new Thread(new Runnable()
 		{
 
@@ -192,16 +190,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				{
 					while (!data.isFinished())
 					{
-						calculateJob();
-
-						//						synchronized (deque)
-						//						{
-						//							if (finished || deque.isEmpty() && solutions.get() > 0 && waitingForWork.size() == senders.size())
-						//							{
-						//								finished = true;
-						//								break;
-						//							}
-						//						}
+						calculateQueueBoard();
 					}
 
 				}
@@ -215,6 +204,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			}
 		});
 		t.start();
+
+		//Wait for ALL calclations to finish and to find a solution.
 		synchronized (lock)
 		{
 			lock.wait();
@@ -226,6 +217,11 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		System.out.flush();
 	}
 
+	/**
+	 * Open a receiving port that allows upcalls to happen.
+	 * 
+	 * @throws IOException
+	 */
 	private void openPorts() throws IOException
 	{
 		ReceivePort receiver = data.getParent().ibis.createReceivePort(Ida.portType, "server", this, this, new Properties());
@@ -262,41 +258,19 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			// do nothing
 		}
 	}
-	//do
-	//	{
-	//		while (!deque.isEmpty())
-	//			deque.remove();
-	//
-	//		initialBoard.setBound(bound);
-	//		deque.addFirst(initialBoard);
-	//
-	//		System.out.println("Bound " + bound);
-	//
-	//		while (!deque.isEmpty())
-	//		{
-	//			while (waitingForWork.isEmpty())
-	//			{
-	//				System.out.println("Waiting for workers to connect");
-	//			}
-	//			System.out.println("Workers connected sending board");
-	//			sendBoard(getBoard(), waitingForWork.pop());
-	//			while (senders.size() > waitingForWork.size() && deque.isEmpty())
-	//			{
-	//				//While some workers are working - wait for them to finish
-	//				System.out.println("Waiting for answer");
-	//			}
-	//		}
-	//
-	//		bound++;
-	//	} while (solutions.get() == 0);
 
-	private void calculateJob() throws IOException
+	/**
+	 * Looped to get boards from the queue
+	 * 
+	 * @throws IOException
+	 */
+	private void calculateQueueBoard() throws IOException
 	{
 
 		Board b = getBoardAfterWait();
-		if (b == null)
+		if (b == null) //Board is only NULL when there is nothing in the queue and the slaves are waiting as well.
 		{
-			data.setFinished(true);
+			data.setFinished(true); //So it is finished.
 
 			synchronized (lock)
 			{
@@ -305,25 +279,14 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 			return;
 		}
-		int solution = calcJob(b);
-		if (solution > 0)
+		int solution = calculateBoardSolution(b);
+		if (solution > 0) //No need to add 0 as a solution useless locking of the variable.
 			data.getSolutions().addAndGet(solution);
-		//		if (b == null)
-		//			return;
-		//		if (b.distance() == 1)
-		//			solutions.addAndGet(1);
-		//		else if (b.distance() > b.bound())
-		//			solutions.addAndGet(0);
-		//		else
-		//		{
-		//			ArrayList<Board> boards = cache == null ? b.makeMoves() : b.makeMoves(cache);
-		//			setBoards(boards);
-		//		}
 	}
 
-	private int calcJob(Board b)
+	private int calculateBoardSolution(Board b)
 	{
-		if (b == null)
+		if (b == null) //Should happen only if finished and needs to be caught to prevent null pointer exceptions.
 			return -1;
 		if (b.distance() == 1)
 			return 1;
@@ -331,54 +294,70 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			return 0;
 		else
 		{
-			ArrayList<Board> boards = !data.useCache() ? b.makeMoves() : b.makeMoves(data.getCache());
-			if (data.getDeque().size() < 32)
+			ArrayList<Board> boards = data.useCache() ? b.makeMoves(data.getCache()) : b.makeMoves();
+			if (data.getDeque().size() < 32) //If queue not full 'enough' fill it so the slaves have something to do as well.
 			{
-				Board b3 = boards.remove(0);
+				Board b3 = boards.remove(0); //Calculate only one board instead of all
 				setBoards(boards);
-				return calcJob(b3);
+				return calculateBoardSolution(b3);
 			}
-			else
+			else //Queue is full enough for the slaves to work so loop over all results to get the solutions.
 			{
 				int result = 0;
 				for (Board b2 : boards)
-					result += calcJob(b2);
+					result += calculateBoardSolution(b2);
 				return result;
 			}
 		}
 	}
 
+	/**
+	 * Returns board from queue, if queue is empty wait for queue to be filled
+	 * again.
+	 * 
+	 * Blocking property
+	 * 
+	 * @return Board
+	 */
 	private Board getBoardAfterWait()
 	{
-		if (data.isFinished())
+		if (data.isFinished()) //Just to catch in case the job has already finished.
 			return null;
 		Board b = null;
 		do
-			waitForQueue();
-		while ((b = getBoard()) == null && !data.isFinished());
+			waitForQueue(); //Wait for queue to be filled at least with one item
+		while ((b = getBoard()) == null && !data.isFinished()); //Try to get item if the game has not finished yet, otherwise wait for the queue again.
 		return b;
 	}
 
+	/**
+	 * Wait for queue to be filled.
+	 */
 	private void waitForQueue()
 	{
 		ConcurrentLinkedDeque<Board> deque = data.getDeque();
 		synchronized (deque)
 		{
-			while (deque.isEmpty() && data.getWaitingForWork().size() < data.getSenders().size())
+			while (deque.isEmpty() && data.getWaitingForWork().size() < data.getSenders().size()) //As long as slaves are working and queue is empty there will be more to do
 			{
 				try
 				{
-					deque.wait(100);
+					deque.wait(100); //try to wait 100ms if not notified try again.
 				}
 				catch (InterruptedException e)
 				{
 				}
 			}
-			if (deque.isEmpty() && data.getWaitingForWork().size() == data.getSenders().size())
+			if (deque.isEmpty() && data.getWaitingForWork().size() == data.getSenders().size()) //check if the job isn't finished because the loop stopped.
 				incrementBound();
 		}
 	}
 
+	/**
+	 * Pop Board from queue if it is not empty.
+	 * 
+	 * @return Board
+	 */
 	private Board getBoard()
 	{
 		Board board = null;
@@ -389,6 +368,12 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		return board;
 	}
 
+	/**
+	 * Add boards to the queue and notify the waiting threads to start picking
+	 * up work.
+	 * 
+	 * @param boards
+	 */
 	private void setBoards(ArrayList<Board> boards)
 	{
 		ConcurrentLinkedDeque<Board> deque = data.getDeque();
@@ -398,10 +383,13 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 		synchronized (deque)
 		{
-			deque.notify();
+			deque.notifyAll();
 		}
 	}
 
+	/**
+	 * Increment bound of initialBoard unless solutions are found.
+	 */
 	private void incrementBound()
 	{
 		if (data.getSolutions().get() > 0)

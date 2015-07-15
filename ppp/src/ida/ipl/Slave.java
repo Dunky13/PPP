@@ -49,18 +49,18 @@ public class Slave implements MessageUpcall
 	{
 		boolean shouldClose = rm.readBoolean();
 
-		if (shouldClose)
+		if (shouldClose) //Shutdown received and close the node.
 		{
 			rm.finish();
 			shutdown();
 		}
 		else
 		{
-			Board board = (Board)rm.readObject();
+			Board board = (Board)rm.readObject(); //Read board from the message.
 			rm.finish();
 			if (board == null) //prevent null pointer exceptions 
 			{
-				sendInt(Slave.NO_BOARD);
+				sendInt(Slave.NO_BOARD); //If in some miraculous case no board is received return an error to the Master, this also ensures the slave is kept in the loop of messages.
 				return;
 			}
 			int solution = calculateJob(board);
@@ -68,6 +68,13 @@ public class Slave implements MessageUpcall
 		}
 	}
 
+	/**
+	 * Calculate the job
+	 * 
+	 * @param b
+	 * @return int Solution
+	 * @throws IOException
+	 */
 	private int calculateJob(Board b) throws IOException
 	{
 		if (b.distance() == 1)
@@ -81,23 +88,12 @@ public class Slave implements MessageUpcall
 		else
 		{
 			ArrayList<Board> boards = cache == null ? b.makeMoves() : b.makeMoves(cache);
-			//			if (replyBoard)
-			//			{
-			//				sendBoards(boards);
-			//				return Slave.SENT_BOARD;
-			//			}
-			//			else
-			//			{
 			int solution = 0;
-			int tmpSolution = 0;
 			for (Board board : boards)
 			{
-				tmpSolution = calculateJob(board);
-				if (tmpSolution > 0)
-					solution += tmpSolution;
+				solution += calculateJob(board);
 			}
 			return solution;
-			//			}
 		}
 	}
 
@@ -131,14 +127,12 @@ public class Slave implements MessageUpcall
 		}
 	}
 
-	private void sendBoards(ArrayList<Board> boards) throws IOException
-	{
-		WriteMessage wm = masterSend.newMessage();
-		wm.writeBoolean(false);
-		wm.writeObject(boards);
-		wm.finish();
-	}
-
+	/**
+	 * Send solution
+	 * 
+	 * @param value
+	 * @throws IOException
+	 */
 	private void sendInt(int value) throws IOException
 	{
 		WriteMessage wm = masterSend.newMessage();
