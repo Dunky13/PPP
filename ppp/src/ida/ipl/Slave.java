@@ -83,23 +83,23 @@ public class Slave implements MessageUpcall
 		else
 		{
 			ArrayList<Board> boards = cache == null ? b.makeMoves() : b.makeMoves(cache);
-			if (replyBoard)
+			//			if (replyBoard)
+			//			{
+			//				sendBoards(boards);
+			//				return Slave.SENT_BOARD;
+			//			}
+			//			else
+			//			{
+			int solution = 0;
+			int tmpSolution = 0;
+			for (Board board : boards)
 			{
-				sendBoards(boards);
-				return Slave.SENT_BOARD;
+				tmpSolution = calculateJob(board, replyBoard);
+				if (tmpSolution > 0)
+					solution += tmpSolution;
 			}
-			else
-			{
-				int solution = 0;
-				int tmpSolution = 0;
-				for (Board board : boards)
-				{
-					tmpSolution = calculateJob(board, replyBoard);
-					if (tmpSolution > 0)
-						solution += tmpSolution;
-				}
-				return solution;
-			}
+			return solution;
+			//			}
 		}
 	}
 
