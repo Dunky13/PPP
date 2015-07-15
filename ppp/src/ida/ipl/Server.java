@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 import ibis.ipl.ConnectionClosedException;
 import ibis.ipl.IbisIdentifier;
@@ -25,7 +26,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		private final HashMap<IbisIdentifier, SendPort> senders;
 		private final Deque<IbisIdentifier> waitingForWork;
 		private ReceivePort receiver;
-		private final Deque<Board> deque;
+		private final ConcurrentLinkedDeque<Board> deque;
 		private final AtomicInteger solutions;
 		private Board initialBoard;
 		private boolean replyBoards;
@@ -37,7 +38,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			this.parent = parent;
 			this.senders = new HashMap<IbisIdentifier, SendPort>();
 			this.waitingForWork = new ArrayDeque<IbisIdentifier>();
-			this.deque = new ArrayDeque<Board>();
+			this.deque = new ConcurrentLinkedDeque<Board>();//new ArrayDeque<Board>();
 			this.solutions = new AtomicInteger(0);
 			this.finished = false;
 		}
@@ -62,7 +63,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			return receiver;
 		}
 
-		public Deque<Board> getDeque()
+		public ConcurrentLinkedDeque<Board> getDeque()
 		{
 			return deque;
 		}
@@ -472,21 +473,18 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		else
 		{
 			ArrayList<Board> boards = data.useCache() ? b.makeMoves() : b.makeMoves(data.getCache());
-			synchronized (data.getDeque())
+			if (data.getDeque().size() < 10)
 			{
-				if (data.getDeque().size() < 10)
-				{
-					Board b3 = boards.remove(0);
-					setBoards(boards);
-					return calcJob(b3);
-				}
-				else
-				{
-					int result = 0;
-					for (Board b2 : boards)
-						result += calcJob(b2);
-					return result;
-				}
+				Board b3 = boards.remove(0);
+				setBoards(boards);
+				return calcJob(b3);
+			}
+			else
+			{
+				int result = 0;
+				for (Board b2 : boards)
+					result += calcJob(b2);
+				return result;
 			}
 		}
 	}
@@ -504,44 +502,38 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 	private void waitForQueue()
 	{
-		synchronized (data.getDeque())
+		ConcurrentLinkedDeque<Board> deque = data.getDeque();
+		while (deque.isEmpty() && data.getWaitingForWork().size() < data.getSenders().size())
 		{
-			while (data.getDeque().isEmpty() && data.getWaitingForWork().size() < data.getSenders().size())
+			try
 			{
-				try
-				{
-					data.getDeque().wait(100);
-				}
-				catch (InterruptedException e)
-				{
-				}
+				deque.wait(100);
 			}
-			if (data.getDeque().isEmpty() && data.getWaitingForWork().size() == data.getSenders().size())
-				incrementBound();
+			catch (InterruptedException e)
+			{
+			}
 		}
+		if (deque.isEmpty() && data.getWaitingForWork().size() == data.getSenders().size())
+			incrementBound();
 	}
 
 	private Board getBoard()
 	{
 		Board board = null;
-		synchronized (data.getDeque())
-		{
-			if (data.getDeque().isEmpty()) //Bound finished and no result found
-				return null;
-			board = data.getDeque().pop();
-		}
+		ConcurrentLinkedDeque<Board> deque = data.getDeque();
+		if (deque.isEmpty()) //Bound finished and no result found
+			return null;
+		board = deque.pop();
 		return board;
 	}
 
 	private void setBoards(ArrayList<Board> boards)
 	{
-		synchronized (data.getDeque())
+		ConcurrentLinkedDeque<Board> deque = data.getDeque();
+		for (Board b : boards)
 		{
-			for (Board b : boards)
-			{
-				data.getDeque().add(b);
-				data.getDeque().notify();
-			}
+			deque.add(b);
+			deque.notify();
 		}
 	}
 
@@ -559,16 +551,14 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 		synchronized (data.getInitialBoard())
 		{
-			synchronized (data.getDeque())
-			{
-				if (!data.getDeque().isEmpty())
-					return;
-				int bound = data.getInitialBoard().bound() + 1;
-				data.getInitialBoard().setBound(bound);
-				System.out.print(" " + bound);
-				data.getDeque().add(data.getInitialBoard());
-				data.setReplyBoards(true);
-			}
+			ConcurrentLinkedDeque<Board> deque = data.getDeque();
+			if (!deque.isEmpty())
+				return;
+			int bound = data.getInitialBoard().bound() + 1;
+			data.getInitialBoard().setBound(bound);
+			System.out.print(" " + bound);
+			deque.add(data.getInitialBoard());
+			data.setReplyBoards(true);
 		}
 	}
 }
