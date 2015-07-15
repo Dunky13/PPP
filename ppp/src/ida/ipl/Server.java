@@ -29,7 +29,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		private final ConcurrentLinkedDeque<Board> deque;
 		private final AtomicInteger solutions;
 		private Board initialBoard;
-		private boolean replyBoards;
 		private BoardCache cache;
 		private boolean finished;
 
@@ -78,11 +77,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			return initialBoard;
 		}
 
-		public boolean isReplyBoards()
-		{
-			return replyBoards;
-		}
-
 		public BoardCache getCache()
 		{
 			return cache;
@@ -101,11 +95,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		public void setInitialBoard(Board initialBoard)
 		{
 			this.initialBoard = initialBoard;
-		}
-
-		public void setReplyBoards(boolean replyBoards)
-		{
-			this.replyBoards = replyBoards;
 		}
 
 		public void setCache(BoardCache cache)
@@ -285,7 +274,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		SendPort port = data.getSenders().get(destination);
 		WriteMessage wm = port.newMessage();
 		wm.writeBoolean(false);
-		wm.writeBoolean(false); //Don't reply boards - calculate them on the server itself
 		wm.writeObject(board);
 		wm.finish();
 		return true;
@@ -472,7 +460,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			return 0;
 		else
 		{
-			ArrayList<Board> boards = data.useCache() ? b.makeMoves() : b.makeMoves(data.getCache());
+			ArrayList<Board> boards = !data.useCache() ? b.makeMoves() : b.makeMoves(data.getCache());
 			if (data.getDeque().size() < 10)
 			{
 				Board b3 = boards.remove(0);
@@ -564,7 +552,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			data.getInitialBoard().setBound(bound);
 			System.out.print(" " + bound);
 			deque.add(data.getInitialBoard());
-			data.setReplyBoards(true);
 		}
 	}
 }

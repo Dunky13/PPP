@@ -56,7 +56,6 @@ public class Slave implements MessageUpcall
 		}
 		else
 		{
-			boolean replyBoard = rm.readBoolean();
 			Board board = (Board)rm.readObject();
 			rm.finish();
 			if (board == null) //prevent null pointer exceptions 
@@ -64,13 +63,12 @@ public class Slave implements MessageUpcall
 				sendInt(Slave.NO_BOARD);
 				return;
 			}
-			int solution = calculateJob(board, replyBoard);
-			if (!replyBoard && solution >= 0)
-				sendInt(solution);
+			int solution = calculateJob(board);
+			sendInt(solution);
 		}
 	}
 
-	private int calculateJob(Board b, boolean replyBoard) throws IOException
+	private int calculateJob(Board b) throws IOException
 	{
 		if (b.distance() == 1)
 		{
@@ -94,7 +92,7 @@ public class Slave implements MessageUpcall
 			int tmpSolution = 0;
 			for (Board board : boards)
 			{
-				tmpSolution = calculateJob(board, replyBoard);
+				tmpSolution = calculateJob(board);
 				if (tmpSolution > 0)
 					solution += tmpSolution;
 			}
