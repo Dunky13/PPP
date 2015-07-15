@@ -1,13 +1,9 @@
 package ida.ipl;
 
 import java.io.IOException;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
-import java.util.HashMap;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.atomic.AtomicInteger;
 import ibis.ipl.ConnectionClosedException;
 import ibis.ipl.IbisIdentifier;
 import ibis.ipl.MessageUpcall;
@@ -20,124 +16,15 @@ import ibis.ipl.WriteMessage;
 
 public class Server implements MessageUpcall, ReceivePortConnectUpcall
 {
-	class SharedData
-	{
-		private final Ida parent;
-		private final HashMap<IbisIdentifier, SendPort> senders;
-		private final Deque<IbisIdentifier> waitingForWork;
-		private ReceivePort receiver;
-		private final ConcurrentLinkedDeque<Board> deque;
-		private final AtomicInteger solutions;
-		private Board initialBoard;
-		private BoardCache cache;
-		private boolean finished;
-
-		public SharedData(Ida parent)
-		{
-			this.parent = parent;
-			this.senders = new HashMap<IbisIdentifier, SendPort>();
-			this.waitingForWork = new ArrayDeque<IbisIdentifier>();
-			this.deque = new ConcurrentLinkedDeque<Board>();//new ArrayDeque<Board>();
-			this.solutions = new AtomicInteger(0);
-			this.finished = false;
-		}
-
-		public Ida getParent()
-		{
-			return parent;
-		}
-
-		public HashMap<IbisIdentifier, SendPort> getSenders()
-		{
-			return senders;
-		}
-
-		public Deque<IbisIdentifier> getWaitingForWork()
-		{
-			return waitingForWork;
-		}
-
-		public ReceivePort getReceiver()
-		{
-			return receiver;
-		}
-
-		public ConcurrentLinkedDeque<Board> getDeque()
-		{
-			return deque;
-		}
-
-		public AtomicInteger getSolutions()
-		{
-			return solutions;
-		}
-
-		public Board getInitialBoard()
-		{
-			return initialBoard;
-		}
-
-		public BoardCache getCache()
-		{
-			return cache;
-		}
-
-		public boolean isFinished()
-		{
-			return finished;
-		}
-
-		public void setReceiver(ReceivePort receiver)
-		{
-			this.receiver = receiver;
-		}
-
-		public void setInitialBoard(Board initialBoard)
-		{
-			this.initialBoard = initialBoard;
-
-			while (!deque.isEmpty())
-				deque.remove();
-
-			ArrayList<Board> boards = this.useCache() ? initialBoard.makeMoves(getCache()) : initialBoard.makeMoves();
-
-			for (Board b : boards)
-			{
-				deque.addFirst(b);
-			}
-		}
-
-		public void setCache(BoardCache cache)
-		{
-			this.cache = cache;
-		}
-
-		public void setFinished(boolean finished)
-		{
-			this.finished = finished;
-		}
-
-		public boolean useCache()
-		{
-			return this.cache != null;
-		}
-	}
-
 	private final static Object lock = new Object();
 
-	private final SharedData data;
+	private final SharedData data; //SharedData object is used to share the data that is accessible to the Server class between threads (The solving thread and Upcall threads)
 
 	public Server(Ida parent)
 	{
 		this.data = new SharedData(parent);
 	}
 
-	/**
-	 * Main function.
-	 *
-	 * @param arguments
-	 *            list of arguments
-	 */
 	public void run(String fileName, boolean useCache) throws IOException
 	{
 
@@ -168,11 +55,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		// open Ibis ports
 		openPorts();
 
-		// solve
 		long start = System.currentTimeMillis();
 		try
 		{
-			solve(data.getInitialBoard());
+			execution();
 		}
 		catch (InterruptedException e)
 		{
@@ -236,9 +122,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 	}
 
-	/**
-	 * Processes a cube request / notification of found solutions from a worker.
-	 */
 	@SuppressWarnings("unchecked")
 	@Override
 	public void upcall(ReadMessage rm) throws IOException, ClassNotFoundException
@@ -267,16 +150,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 
 		Board replyValue = getBoardAfterWait(); // may block for some time
-		//		if (replyValue == null)
-		//			return;
-		// Get the port to the sender and send the cube
 		if (sendBoard(replyValue, sender))
 			data.getWaitingForWork().remove(sender);
 	}
 
-	/**
-	 * Send a cube to a worker.
-	 */
 	private boolean sendBoard(Board board, IbisIdentifier destination) throws IOException
 	{
 		if (data.isFinished())
@@ -289,27 +166,16 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		return true;
 	}
 
-	/**
-	 * Solves a Rubik's cube by iteratively searching for solutions with a
-	 * greater depth. This guarantees the optimal solution is found. Repeats all
-	 * work for the previous iteration each iteration though...
-	 *
-	 * @param cube
-	 *            the cube to solve
-	 */
-	private void solve(Board initialBoard) throws InterruptedException, IOException
+	private void execution() throws InterruptedException, IOException
 	{
 
+		Board initialBoard = data.getInitialBoard();
 		int bound = initialBoard.distance();
 
 		System.out.print("Try bound ");
 		System.out.flush();
 		initialBoard.setBound(bound);
 		data.setInitialBoard(initialBoard);
-		synchronized (data.getDeque())
-		{
-			data.getDeque().addFirst(initialBoard);
-		}
 
 		System.out.print(" " + bound);
 		//		synchronized (this)
@@ -360,11 +226,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		System.out.flush();
 	}
 
-	/**
-	 * Creates a receive port to receive cube requests from workers.
-	 * 
-	 * @throws IOException
-	 */
 	private void openPorts() throws IOException
 	{
 		ReceivePort receiver = data.getParent().ibis.createReceivePort(Ida.portType, "server", this, this, new Properties());
