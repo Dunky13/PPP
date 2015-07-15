@@ -264,11 +264,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			boards = (ArrayList<Board>)rm.readObject();
 			rm.finish();
 			setBoards(boards);
-			synchronized (data.getDeque())
-			{
-				if (data.getDeque().size() > 1) //senders.size() * 2)
-					data.setReplyBoards(false);
-			}
 		}
 
 		Board replyValue = getBoardAfterWait(); // may block for some time
@@ -288,7 +283,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		SendPort port = data.getSenders().get(destination);
 		WriteMessage wm = port.newMessage();
 		wm.writeBoolean(false);
-		wm.writeBoolean(data.isReplyBoards());
+		wm.writeBoolean(false); //Don't reply boards - calculate them on the server itself
 		wm.writeObject(board);
 		wm.finish();
 	}
@@ -309,6 +304,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		System.out.print("Try bound ");
 		System.out.flush();
 		initialBoard.setBound(bound);
+		data.setInitialBoard(initialBoard);
 		synchronized (data.getDeque())
 		{
 			data.getDeque().addFirst(initialBoard);
@@ -345,10 +341,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				catch (IOException e)
 				{
 				}
-				//				synchronized (lock)
-				//				{
-				//					lock.notifyAll();
-				//				}
+				synchronized (lock)
+				{
+					lock.notifyAll();
+				}
 			}
 		});
 		t.start();
