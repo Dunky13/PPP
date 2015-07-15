@@ -95,6 +95,16 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		public void setInitialBoard(Board initialBoard)
 		{
 			this.initialBoard = initialBoard;
+
+			while (!deque.isEmpty())
+				deque.remove();
+
+			ArrayList<Board> boards = this.useCache() ? initialBoard.makeMoves(getCache()) : initialBoard.makeMoves();
+
+			for (Board b : boards)
+			{
+				deque.addFirst(b);
+			}
 		}
 
 		public void setCache(BoardCache cache)
@@ -461,7 +471,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		else
 		{
 			ArrayList<Board> boards = !data.useCache() ? b.makeMoves() : b.makeMoves(data.getCache());
-			if (data.getDeque().size() < 10)
+			if (data.getDeque().size() < 32)
 			{
 				Board b3 = boards.remove(0);
 				setBoards(boards);
@@ -542,16 +552,15 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			}
 			return;
 		}
-
+		ConcurrentLinkedDeque<Board> deque = data.getDeque();
+		if (!deque.isEmpty())
+			return;
 		synchronized (data.getInitialBoard())
 		{
-			ConcurrentLinkedDeque<Board> deque = data.getDeque();
-			if (!deque.isEmpty())
-				return;
 			int bound = data.getInitialBoard().bound() + 1;
 			data.getInitialBoard().setBound(bound);
 			System.out.print(" " + bound);
-			deque.add(data.getInitialBoard());
+			data.setInitialBoard(data.getInitialBoard());
 		}
 	}
 }
