@@ -271,24 +271,24 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		//		if (replyValue == null)
 		//			return;
 		// Get the port to the sender and send the cube
-		sendBoard(replyValue, sender);
-
-		data.getWaitingForWork().remove(sender);
+		if (sendBoard(replyValue, sender))
+			data.getWaitingForWork().remove(sender);
 	}
 
 	/**
 	 * Send a cube to a worker.
 	 */
-	private void sendBoard(Board board, IbisIdentifier destination) throws IOException
+	private boolean sendBoard(Board board, IbisIdentifier destination) throws IOException
 	{
 		if (data.isFinished())
-			return;
+			return false;
 		SendPort port = data.getSenders().get(destination);
 		WriteMessage wm = port.newMessage();
 		wm.writeBoolean(false);
 		wm.writeBoolean(false); //Don't reply boards - calculate them on the server itself
 		wm.writeObject(board);
 		wm.finish();
+		return true;
 	}
 
 	/**
