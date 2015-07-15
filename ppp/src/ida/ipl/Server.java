@@ -280,6 +280,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 */
 	private void sendBoard(Board board, IbisIdentifier destination) throws IOException
 	{
+		if (data.isFinished())
+			return;
 		SendPort port = data.getSenders().get(destination);
 		WriteMessage wm = port.newMessage();
 		wm.writeBoolean(false);
