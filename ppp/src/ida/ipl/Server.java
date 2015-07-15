@@ -503,18 +503,21 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private void waitForQueue()
 	{
 		ConcurrentLinkedDeque<Board> deque = data.getDeque();
-		while (deque.isEmpty() && data.getWaitingForWork().size() < data.getSenders().size())
+		synchronized (deque)
 		{
-			try
+			while (deque.isEmpty() && data.getWaitingForWork().size() < data.getSenders().size())
 			{
-				deque.wait(100);
+				try
+				{
+					deque.wait(100);
+				}
+				catch (InterruptedException e)
+				{
+				}
 			}
-			catch (InterruptedException e)
-			{
-			}
+			if (deque.isEmpty() && data.getWaitingForWork().size() == data.getSenders().size())
+				incrementBound();
 		}
-		if (deque.isEmpty() && data.getWaitingForWork().size() == data.getSenders().size())
-			incrementBound();
 	}
 
 	private Board getBoard()
@@ -533,7 +536,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		for (Board b : boards)
 		{
 			deque.add(b);
-			data.getDeque().notify();
+		}
+		synchronized (deque)
+		{
+			deque.notify();
 		}
 	}
 
