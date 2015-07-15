@@ -533,7 +533,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		for (Board b : boards)
 		{
 			deque.add(b);
-			deque.notify();
+			data.getDeque().notify();
 		}
 	}
 
