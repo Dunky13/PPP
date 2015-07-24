@@ -142,8 +142,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		int boundValue = rm.readInt();
 		rm.finish();
 		// Solution received
-		if (boundValue != data.getCurrentBound().get())
-			data.STOP();
+		//		if (boundValue != data.getCurrentBound().get())
+		//			data.STOP();
 		if (requestValue > 0)
 			data.getSolutions().addAndGet(requestValue);
 
@@ -293,7 +293,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 		if (!incrementBound())
 			return null;
-		Board b = data.getBoard();
+		Board b = data.getWaitingBoard();
 		return b;
 	}
 
