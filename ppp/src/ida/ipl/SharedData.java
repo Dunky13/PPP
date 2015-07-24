@@ -82,11 +82,9 @@ class SharedData
 	 */
 	public Board getBoard()
 	{
-		Board board = null;
-		if (deque.isEmpty()) // Bound finished and no result found
-			return null;
-		board = deque.pop();
-		return board;
+		if (!deque.isEmpty())
+			return deque.pop();
+		return null;
 	}
 
 	public Board getWaitingBoard()
@@ -95,7 +93,7 @@ class SharedData
 		do
 		{
 			b = getBoard();
-		} while (b == null && !programFinished() && DequeIsEmpty() && SharedData.wait(deque));
+		} while (b == null && DequeIsEmpty() && !programFinished() && SharedData.wait(deque));
 		/*
 		 * If b is not null can return immedeatly
 		 * Else the solution is not yet found AND the queue is empty - then wait (wait always return true, is notified when something is added to the queue)
