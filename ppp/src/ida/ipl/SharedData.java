@@ -14,6 +14,7 @@ class SharedData
 {
 	private final Ida parent;
 	private final HashMap<IbisIdentifier, SendPort> senders;
+	private final AtomicInteger minimalQueueSize;
 	private final Deque<IbisIdentifier> waitingForWork;
 	private ReceivePort receiver;
 	private final ConcurrentLinkedDeque<Board> deque;
@@ -29,6 +30,7 @@ class SharedData
 		this.deque = new ConcurrentLinkedDeque<Board>();// new
 		// ArrayDeque<Board>();
 		this.solutions = new AtomicInteger(0);
+		this.minimalQueueSize = new AtomicInteger(0);
 	}
 
 	public Ida getParent()
@@ -61,6 +63,11 @@ class SharedData
 		return solutions;
 	}
 
+	public int getMinimalQueueSize()
+	{
+		return minimalQueueSize.get();
+	}
+
 	public Board getInitialBoard()
 	{
 		return initialBoard;
@@ -69,61 +76,6 @@ class SharedData
 	public BoardCache getCache()
 	{
 		return cache;
-	}
-
-	public boolean programFinished()
-	{
-		if (this.solutions.get() > 0 && this.boundFinished())
-			return true;
-		return false;
-	}
-
-	public boolean boundFinished()
-	{
-		boolean bound = deque.isEmpty();
-		if (this.senders.size() > 0)
-		{
-			synchronized (waitingForWork)
-			{
-				bound = bound && this.waitingForWork.size() == this.senders.size();
-			}
-		}
-		return bound;
-	}
-
-	public void setReceiver(ReceivePort receiver)
-	{
-		this.receiver = receiver;
-	}
-
-	public void setInitialBoard(Board initialBoard)
-	{
-		this.initialBoard = initialBoard;
-
-		while (!deque.isEmpty())
-			deque.remove();
-
-		ArrayList<Board> boards = this.useCache() ? initialBoard.makeMoves(getCache()) : initialBoard.makeMoves();
-
-		for (Board b : boards)
-		{
-			deque.addFirst(b);
-		}
-	}
-
-	public void setCache(BoardCache cache)
-	{
-		this.cache = cache;
-	}
-
-	public boolean useCache()
-	{
-		return this.cache != null;
-	}
-
-	public boolean DequeIsEmpty()
-	{
-		return this.deque.isEmpty();
 	}
 
 	/**
@@ -155,6 +107,78 @@ class SharedData
 		return b;
 	}
 
+	public boolean programFinished()
+	{
+		if (this.solutions.get() > 0 && this.boundFinished())
+			return true;
+		return false;
+	}
+
+	public boolean boundFinished()
+	{
+		boolean bound = deque.isEmpty();
+		if (this.senders.size() > 0)
+		{
+			synchronized (waitingForWork)
+			{
+				bound = bound && this.waitingForWork.size() == this.senders.size();
+			}
+		}
+		return bound;
+	}
+
+	public boolean DequeIsEmpty()
+	{
+		return this.deque.isEmpty();
+	}
+
+	public boolean useCache()
+	{
+		return this.cache != null;
+	}
+
+	public void setReceiver(ReceivePort receiver)
+	{
+		this.receiver = receiver;
+	}
+
+	public void setInitialBoard(Board initialBoard)
+	{
+		this.initialBoard = initialBoard;
+
+		while (!deque.isEmpty())
+			deque.remove();
+
+		ArrayList<Board> boards = this.useCache() ? initialBoard.makeMoves(getCache()) : initialBoard.makeMoves();
+
+		for (Board b : boards)
+		{
+			deque.addFirst(b);
+		}
+	}
+
+	public void setCache(BoardCache cache)
+	{
+		this.cache = cache;
+	}
+
+	/**
+	 * Increment bound of initialBoard unless solutions are found.
+	 */
+	public void incrementBound()
+	{
+		if (!deque.isEmpty())
+			return;
+		synchronized (this.initialBoard)
+		{
+			int bound = this.initialBoard.bound() + 1;
+			this.initialBoard.setBound(bound);
+			System.out.print(" " + bound);
+			setInitialBoard(this.initialBoard);
+		}
+
+	}
+
 	/**
 	 * Add boards to the queue and notify the waiting threads to start picking
 	 * up work.
@@ -168,6 +192,11 @@ class SharedData
 			deque.add(b);
 		}
 		SharedData.notifyAll(deque);
+	}
+
+	public void calculateMinimumQueueSize()
+	{
+		this.minimalQueueSize.set((this.senders.size() + 1) * 2);
 	}
 
 	public static boolean wait(Object o)
@@ -192,23 +221,6 @@ class SharedData
 			o.notifyAll();
 		}
 		return true;
-	}
-
-	/**
-	 * Increment bound of initialBoard unless solutions are found.
-	 */
-	public void incrementBound()
-	{
-		if (!deque.isEmpty())
-			return;
-		synchronized (this.initialBoard)
-		{
-			int bound = this.initialBoard.bound() + 1;
-			this.initialBoard.setBound(bound);
-			System.out.print(" " + bound);
-			setInitialBoard(this.initialBoard);
-		}
-
 	}
 
 }

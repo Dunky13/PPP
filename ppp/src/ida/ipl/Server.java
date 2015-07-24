@@ -98,6 +98,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			{
 				data.getWaitingForWork().push(worker);
 			}
+			data.calculateMinimumQueueSize();
 		}
 		catch (IOException e)
 		{
@@ -269,7 +270,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		else
 		{
 			ArrayList<Board> boards = data.useCache() ? b.makeMoves(data.getCache()) : b.makeMoves();
-			if (data.getDeque().size() < 32) // If queue not full 'enough' fill it so the slaves have something to do as well.
+			if (data.getDeque().size() < data.getMinimalQueueSize()) // If queue not full 'enough' fill it so the slaves have something to do as well.
 			{
 				Board b3 = boards.remove(0); // Calculate only one board instead of all
 				data.addBoards(boards);
