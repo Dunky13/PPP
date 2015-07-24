@@ -18,7 +18,24 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 {
 	private final static Object lock = new Object();
 
-	private final SharedData data; //SharedData object is used to share the data that is accessible to the Server class between threads (The solving thread and Upcall threads)
+	private final SharedData data; // SharedData object is used to share the
+	// data that is accessible to the Server
+	// class between threads (The solving thread
+	// and Upcall threads)
+
+	private Runnable calculation = new Runnable()
+	{
+
+		@Override
+		public void run()
+		{
+			while (!data.isFinished())
+			{
+				calculateQueueBoard();
+			}
+			SharedData.notifyAll(lock);
+		}
+	};;
 
 	public Server(Ida parent)
 	{
@@ -56,14 +73,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		openPorts();
 
 		long start = System.currentTimeMillis();
-		try
-		{
-			execution();
-		}
-		catch (InterruptedException e)
-		{
-			e.printStackTrace();
-		}
+		execution();
 		long end = System.currentTimeMillis();
 
 		// NOTE: this is printed to standard error! The rest of the output is
@@ -122,32 +132,20 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 	}
 
-	@SuppressWarnings("unchecked")
 	@Override
 	public void upcall(ReadMessage rm) throws IOException, ClassNotFoundException
 	{
 		// Process the incoming message and decrease the number of busy workers
 		IbisIdentifier sender = rm.origin().ibisIdentifier();
 		int requestValue = 0;
-		ArrayList<Board> boards = null;
-		boolean recvInt = rm.readBoolean();
 
 		data.getWaitingForWork().add(sender);
-		if (recvInt)
-		{
-			requestValue = rm.readInt();
-			rm.finish();
-			if (requestValue != Ida.INIT_VALUE && requestValue != Slave.NO_BOARD) //Solution received
-			{
-				data.getSolutions().addAndGet(requestValue);
-			}
-		}
-		else
-		{
-			boards = (ArrayList<Board>)rm.readObject();
-			rm.finish();
-			setBoards(boards);
-		}
+
+		requestValue = rm.readInt();
+		rm.finish();
+		// Solution received
+		if (requestValue > 0)
+			data.getSolutions().addAndGet(requestValue);
 
 		Board replyValue = getBoardAfterWait(); // may block for some time
 		if (sendBoard(replyValue, sender))
@@ -166,7 +164,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		return true;
 	}
 
-	private void execution() throws InterruptedException, IOException
+	private void execution() throws IOException
 	{
 
 		Board initialBoard = data.getInitialBoard();
@@ -179,37 +177,14 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 		System.out.print(" " + bound);
 
-		//Run the solving on server side in a seperate thread so it does not block upcalls or the lock that waits until ALL calculations are finished.
-		Thread t = new Thread(new Runnable()
-		{
-
-			@Override
-			public void run()
-			{
-				try
-				{
-					while (!data.isFinished())
-					{
-						calculateQueueBoard();
-					}
-
-				}
-				catch (IOException e)
-				{
-				}
-				synchronized (lock)
-				{
-					lock.notifyAll();
-				}
-			}
-		});
+		// Run the solving on server side in a seperate thread so it does not
+		// block upcalls or the lock that waits until ALL calculations are
+		// finished.
+		Thread t = new Thread(this.calculation);
 		t.start();
 
-		//Wait for ALL calclations to finish and to find a solution.
-		synchronized (lock)
-		{
-			lock.wait();
-		}
+		// Wait for ALL calclations to finish and to find a solution.
+		SharedData.wait(lock);
 
 		shutdown();
 
@@ -263,30 +238,25 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 * Looped to get boards from the queue
 	 * 
 	 * @throws IOException
+	 * 			@throws
 	 */
-	private void calculateQueueBoard() throws IOException
+	private void calculateQueueBoard()
 	{
 
 		Board b = getBoardAfterWait();
-		if (b == null) //Board is only NULL when there is nothing in the queue and the slaves are waiting as well.
+		if (data.isFinished())
 		{
-			data.setFinished(true); //So it is finished.
-
-			synchronized (lock)
-			{
-				lock.notifyAll();
-			}
-
+			SharedData.notifyAll(lock);
 			return;
 		}
 		int solution = calculateBoardSolution(b);
-		if (solution > 0) //No need to add 0 as a solution useless locking of the variable.
+		if (solution > 0) // No need to add 0 as a solution useless locking of the variable.
 			data.getSolutions().addAndGet(solution);
 	}
 
 	private int calculateBoardSolution(Board b)
 	{
-		if (b == null) //Should happen only if finished and needs to be caught to prevent null pointer exceptions.
+		if (b == null) // Should happen only if finished and needs to be caught to prevent null pointer exceptions.
 			return -1;
 		if (b.distance() == 1)
 			return 1;
@@ -295,13 +265,14 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		else
 		{
 			ArrayList<Board> boards = data.useCache() ? b.makeMoves(data.getCache()) : b.makeMoves();
-			if (data.getDeque().size() < 32) //If queue not full 'enough' fill it so the slaves have something to do as well.
+			if (data.getDeque().size() < 32) // If queue not full 'enough' fill it so the slaves have something to do as well.
 			{
-				Board b3 = boards.remove(0); //Calculate only one board instead of all
-				setBoards(boards);
+				Board b3 = boards.remove(0); // Calculate only one board instead of all
+				data.addBoards(boards);
+
 				return calculateBoardSolution(b3);
 			}
-			else //Queue is full enough for the slaves to work so loop over all results to get the solutions.
+			else // Queue is full enough for the slaves to work so loop over all results to get the solutions.
 			{
 				int result = 0;
 				for (Board b2 : boards)
@@ -318,73 +289,17 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 * Blocking property
 	 * 
 	 * @return Board
+	 * @throws InterruptedException
 	 */
 	private Board getBoardAfterWait()
 	{
-		if (data.isFinished()) //Just to catch in case the job has already finished.
+		// Just to catch in case the job has already finished.
+		if (data.isFinished())
 			return null;
-		Board b = null;
-		do
-			waitForQueue(); //Wait for queue to be filled at least with one item
-		while ((b = getBoard()) == null && !data.isFinished()); //Try to get item if the game has not finished yet, otherwise wait for the queue again.
+		Board b = data.getBoard();
+		if (data.isFinished())
+			incrementBound();
 		return b;
-	}
-
-	/**
-	 * Wait for queue to be filled.
-	 */
-	private void waitForQueue()
-	{
-		ConcurrentLinkedDeque<Board> deque = data.getDeque();
-		synchronized (deque)
-		{
-			while (deque.isEmpty() && data.getWaitingForWork().size() < data.getSenders().size()) //As long as slaves are working and queue is empty there will be more to do
-			{
-				try
-				{
-					deque.wait(100); //try to wait 100ms if not notified try again.
-				}
-				catch (InterruptedException e)
-				{
-				}
-			}
-			if (deque.isEmpty() && data.getWaitingForWork().size() == data.getSenders().size()) //check if the job isn't finished because the loop stopped.
-				incrementBound();
-		}
-	}
-
-	/**
-	 * Pop Board from queue if it is not empty.
-	 * 
-	 * @return Board
-	 */
-	private Board getBoard()
-	{
-		Board board = null;
-		ConcurrentLinkedDeque<Board> deque = data.getDeque();
-		if (deque.isEmpty()) //Bound finished and no result found
-			return null;
-		board = deque.pop();
-		return board;
-	}
-
-	/**
-	 * Add boards to the queue and notify the waiting threads to start picking
-	 * up work.
-	 * 
-	 * @param boards
-	 */
-	private void setBoards(ArrayList<Board> boards)
-	{
-		ConcurrentLinkedDeque<Board> deque = data.getDeque();
-		for (Board b : boards)
-		{
-			deque.add(b);
-		}
-		synchronized (deque)
-		{
-			deque.notifyAll();
-		}
 	}
 
 	/**
@@ -394,11 +309,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 		if (data.getSolutions().get() > 0)
 		{
-			synchronized (lock)
-			{
-				lock.notifyAll();
-				data.setFinished(true);
-			}
+			SharedData.notifyAll(lock);
 			return;
 		}
 		ConcurrentLinkedDeque<Board> deque = data.getDeque();

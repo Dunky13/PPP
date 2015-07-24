@@ -49,18 +49,19 @@ public class Slave implements MessageUpcall
 	{
 		boolean shouldClose = rm.readBoolean();
 
-		if (shouldClose) //Shutdown received and close the node.
+		if (shouldClose) // Shutdown received and close the node.
 		{
 			rm.finish();
 			shutdown();
 		}
 		else
 		{
-			Board board = (Board)rm.readObject(); //Read board from the message.
+			Board board = (Board)rm.readObject(); // Read board from the message.
 			rm.finish();
-			if (board == null) //prevent null pointer exceptions 
+			if (board == null) // prevent null pointer exceptions
 			{
-				sendInt(Slave.NO_BOARD); //If in some miraculous case no board is received return an error to the Master, this also ensures the slave is kept in the loop of messages.
+				sendInt(Slave.NO_BOARD); // If in some miraculous case no board is received return an error to the Master, this also ensures the slave is kept
+				// in the loop of messages.
 				return;
 			}
 			int solution = calculateJob(board);
@@ -136,7 +137,6 @@ public class Slave implements MessageUpcall
 	private void sendInt(int value) throws IOException
 	{
 		WriteMessage wm = masterSend.newMessage();
-		wm.writeBoolean(true);
 		wm.writeInt(value);
 		wm.finish();
 	}

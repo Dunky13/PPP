@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import ibis.ipl.IbisIdentifier;
 import ibis.ipl.ReceivePort;
@@ -20,16 +21,17 @@ class SharedData
 	private final AtomicInteger solutions;
 	private Board initialBoard;
 	private BoardCache cache;
-	private boolean finished;
+	private AtomicBoolean finished;
 
 	public SharedData(Ida parent)
 	{
 		this.parent = parent;
 		this.senders = new HashMap<IbisIdentifier, SendPort>();
 		this.waitingForWork = new ArrayDeque<IbisIdentifier>();
-		this.deque = new ConcurrentLinkedDeque<Board>();//new ArrayDeque<Board>();
+		this.deque = new ConcurrentLinkedDeque<Board>();// new
+		// ArrayDeque<Board>();
 		this.solutions = new AtomicInteger(0);
-		this.finished = false;
+		this.finished = new AtomicBoolean(false);
 	}
 
 	public Ida getParent()
@@ -74,7 +76,14 @@ class SharedData
 
 	public boolean isFinished()
 	{
-		return finished;
+		if (this.finished.get())
+			return true;
+		synchronized (waitingForWork)
+		{
+			if (this.waitingForWork.size() == this.senders.size() && deque.isEmpty())
+				this.finished.set(true);
+		}
+		return this.finished.get();
 	}
 
 	public void setReceiver(ReceivePort receiver)
@@ -102,13 +111,81 @@ class SharedData
 		this.cache = cache;
 	}
 
-	public void setFinished(boolean finished)
-	{
-		this.finished = finished;
-	}
-
 	public boolean useCache()
 	{
 		return this.cache != null;
+	}
+
+	public boolean DequeIsEmpty()
+	{
+		return this.deque.isEmpty();
+	}
+
+	/**
+	 * Pop Board from queue if it is not empty.
+	 * 
+	 * @return Board
+	 */
+	public Board getBoard()
+	{
+		Board board = null;
+		if (deque.isEmpty()) // Bound finished and no result found
+			return null;
+		board = deque.pop();
+		return board;
+	}
+
+	public Board getWaitingBoard()
+	{
+		Board b = null;
+		do
+		{
+			b = getBoard();
+		} while (b == null && !isFinished() && DequeIsEmpty() && SharedData.wait(deque));
+		/*
+		 * If b is not null can return immedeatly
+		 * Else the solution is not yet found AND the queue is empty - then wait (wait always return true, is notified when something is added to the queue)
+		 */
+
+		return b;
+	}
+
+	/**
+	 * Add boards to the queue and notify the waiting threads to start picking
+	 * up work.
+	 * 
+	 * @param boards
+	 */
+	public void addBoards(ArrayList<Board> boards)
+	{
+		for (Board b : boards)
+		{
+			deque.add(b);
+		}
+		SharedData.notifyAll(deque);
+	}
+
+	public static boolean wait(Object o)
+	{
+		synchronized (o)
+		{
+			try
+			{
+				o.wait();
+			}
+			catch (InterruptedException e)
+			{
+			}
+		}
+		return true;
+	}
+
+	public static boolean notifyAll(Object o)
+	{
+		synchronized (o)
+		{
+			o.notifyAll();
+		}
+		return true;
 	}
 }
