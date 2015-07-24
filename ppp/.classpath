@@ -3,8 +3,6 @@
 	<classpathentry kind="src" path="ipl-2.3/benchmarks/src"/>
 	<classpathentry kind="src" path="ipl-2.3/examples/src"/>
 	<classpathentry kind="src" path="src"/>
-	<classpathentry kind="lib" path="ipl-2.3/benchmarks/lib/ipl-benchmarks.jar"/>
-	<classpathentry kind="lib" path="ipl-2.3/examples/lib/ipl-examples.jar"/>
 	<classpathentry kind="lib" path="ipl-2.3/lib/antenna-bin-1.0.0.jar"/>
 	<classpathentry kind="lib" path="ipl-2.3/lib/asm-all-4.0.jar"/>
 	<classpathentry kind="lib" path="ipl-2.3/lib/bcel-5.3-SNAPSHOT-1000411.jar"/>

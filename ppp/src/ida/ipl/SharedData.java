@@ -21,7 +21,7 @@ class SharedData
 	private final AtomicInteger solutions;
 	private Board initialBoard;
 	private BoardCache cache;
-	private AtomicBoolean finished;
+	private AtomicBoolean boundFinished;
 
 	public SharedData(Ida parent)
 	{
@@ -31,7 +31,7 @@ class SharedData
 		this.deque = new ConcurrentLinkedDeque<Board>();// new
 		// ArrayDeque<Board>();
 		this.solutions = new AtomicInteger(0);
-		this.finished = new AtomicBoolean(false);
+		this.boundFinished = new AtomicBoolean(false);
 	}
 
 	public Ida getParent()
@@ -74,16 +74,23 @@ class SharedData
 		return cache;
 	}
 
-	public boolean isFinished()
+	public boolean programFinished()
 	{
-		if (this.finished.get() || this.solutions.get() > 0)
+		if (this.solutions.get() > 0 && this.boundFinished())
+			return true;
+		return false;
+	}
+
+	public boolean boundFinished()
+	{
+		if (this.boundFinished.get())
 			return true;
 		synchronized (waitingForWork)
 		{
-			if (this.waitingForWork.size() == this.senders.size() && deque.isEmpty() && this.solutions.get() > 0)
-				this.finished.set(true);
+			if (this.waitingForWork.size() == this.senders.size() && deque.isEmpty())
+				this.boundFinished.set(true);
 		}
-		return this.finished.get();
+		return this.boundFinished.get();
 	}
 
 	public void setReceiver(ReceivePort receiver)
@@ -141,7 +148,7 @@ class SharedData
 		do
 		{
 			b = getBoard();
-		} while (b == null && !isFinished() && DequeIsEmpty() && SharedData.wait(deque));
+		} while (b == null && !programFinished() && DequeIsEmpty() && SharedData.wait(deque));
 		/*
 		 * If b is not null can return immedeatly
 		 * Else the solution is not yet found AND the queue is empty - then wait (wait always return true, is notified when something is added to the queue)
@@ -188,4 +195,22 @@ class SharedData
 		}
 		return true;
 	}
+
+	/**
+	 * Increment bound of initialBoard unless solutions are found.
+	 */
+	public void incrementBound()
+	{
+		if (!deque.isEmpty())
+			return;
+		synchronized (this.initialBoard)
+		{
+			int bound = this.initialBoard.bound() + 1;
+			this.initialBoard.setBound(bound);
+			System.out.print(" " + bound);
+			setInitialBoard(this.initialBoard);
+		}
+
+	}
+
 }

@@ -3,7 +3,6 @@ package ida.ipl;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Properties;
-import java.util.concurrent.ConcurrentLinkedDeque;
 import ibis.ipl.ConnectionClosedException;
 import ibis.ipl.IbisIdentifier;
 import ibis.ipl.MessageUpcall;
@@ -32,8 +31,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			do
 			{
 				calculateQueueBoard();
-			} while (!data.isFinished());
-			SharedData.notifyAll(lock);
+			} while (!data.programFinished());
+			programFinished(true);
 		}
 	};
 
@@ -154,7 +153,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 	private boolean sendBoard(Board board, IbisIdentifier destination) throws IOException
 	{
-		if (data.isFinished())
+		if (data.programFinished())
 			return false;
 		SendPort port = data.getSenders().get(destination);
 		WriteMessage wm = port.newMessage();
@@ -243,11 +242,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 
 		Board b = getBoardAfterWait();
-		if (data.isFinished())
-		{
-			SharedData.notifyAll(lock);
+		if (programFinished(data.programFinished()))
 			return;
-		}
 		int solution = calculateBoardSolution(b);
 		if (solution > 0) // No need to add 0 as a solution useless locking of the variable.
 			data.getSolutions().addAndGet(solution);
@@ -293,11 +289,11 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private Board getBoardAfterWait()
 	{
 		// Just to catch in case the job has already finished.
-		if (data.isFinished())
+		if (programFinished(data.programFinished()))
 			return null;
-		Board b = data.getBoard();
-		if (data.isFinished())
+		if (data.boundFinished())
 			incrementBound();
+		Board b = data.getBoard();
 		return b;
 	}
 
@@ -306,20 +302,15 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 */
 	private void incrementBound()
 	{
-		if (data.isFinished())
-		{
+		if (programFinished(data.programFinished()))
+			return;
+		data.incrementBound();
+	}
+
+	private boolean programFinished(boolean b)
+	{
+		if (b)
 			SharedData.notifyAll(lock);
-			return;
-		}
-		ConcurrentLinkedDeque<Board> deque = data.getDeque();
-		if (!deque.isEmpty())
-			return;
-		synchronized (data.getInitialBoard())
-		{
-			int bound = data.getInitialBoard().bound() + 1;
-			data.getInitialBoard().setBound(bound);
-			System.out.print(" " + bound);
-			data.setInitialBoard(data.getInitialBoard());
-		}
+		return b;
 	}
 }
