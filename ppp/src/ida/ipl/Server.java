@@ -54,7 +54,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			try
 			{
-				data.setInitialBoard(new Board(fileName));
+				Board b = new Board(fileName);
+				b.setBound(b.distance());
+				data.getCurrentBound().set(b.distance());
+				data.setInitialBoard(b);
 			}
 			catch (Exception e)
 			{
@@ -171,15 +174,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private void execution() throws IOException
 	{
 
-		Board initialBoard = data.getInitialBoard();
-		int bound = initialBoard.distance();
-
 		System.out.print("Try bound ");
 		System.out.flush();
-		initialBoard.setBound(bound);
-		data.setInitialBoard(initialBoard);
 
-		System.out.print(" " + bound);
+		System.out.print(" " + data.getCurrentBound().get());
 
 		// Run the solving on server side in a seperate thread so it does not
 		// block upcalls or the lock that waits until ALL calculations are
@@ -241,16 +239,17 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	/**
 	 * Looped to get boards from the queue
 	 * 
-	 * @throws IOException
-	 * 			@throws
+	 * @throws IOException @throws
 	 */
 	private void calculateQueueBoard()
 	{
 
+		data.getNodesWaiting().decrementAndGet();
 		Board b = getBoardAfterWait();
 		if (b == null && programFinished(data.programFinished()))
 			return;
 		calculateBoardSolution(b);
+		data.getNodesWaiting().incrementAndGet();
 	}
 
 	private void calculateBoardSolution(Board b)

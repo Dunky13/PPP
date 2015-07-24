@@ -17,6 +17,7 @@ class SharedData
 	private final AtomicInteger solutions;
 	private final AtomicInteger minimalQueueSize;
 	private final AtomicInteger nodesWaiting;
+	private final AtomicInteger currentBound;
 	private Board initialBoard;
 	private BoardCache cache;
 
@@ -28,6 +29,7 @@ class SharedData
 		this.solutions = new AtomicInteger(0);
 		this.minimalQueueSize = new AtomicInteger(0);
 		this.nodesWaiting = new AtomicInteger(0);
+		this.currentBound = new AtomicInteger(0);
 	}
 
 	public Ida getParent()
@@ -63,6 +65,11 @@ class SharedData
 	public int getMinimalQueueSize()
 	{
 		return minimalQueueSize.get();
+	}
+
+	public AtomicInteger getCurrentBound()
+	{
+		return currentBound;
 	}
 
 	public Board getInitialBoard()
@@ -113,7 +120,7 @@ class SharedData
 	{
 		boolean bound = deque.isEmpty();
 		if (!this.senders.isEmpty())
-			bound = bound && this.nodesWaiting.get() == this.senders.size();
+			bound = bound && this.nodesWaiting.get() == (this.senders.size() + 1);
 		return bound;
 	}
 
@@ -161,7 +168,7 @@ class SharedData
 			return;
 		synchronized (this.initialBoard)
 		{
-			int bound = this.initialBoard.bound() + 1;
+			int bound = this.currentBound.incrementAndGet();
 			this.initialBoard.setBound(bound);
 			System.out.print(" " + bound);
 			setInitialBoard(this.initialBoard);
@@ -211,6 +218,11 @@ class SharedData
 			o.notifyAll();
 		}
 		return true;
+	}
+
+	public void setCurrentBound(int bound)
+	{
+		this.currentBound.set(bound);
 	}
 
 }
