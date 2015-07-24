@@ -89,6 +89,8 @@ class SharedData
 		{
 			if (this.waitingForWork.size() == this.senders.size() && deque.isEmpty())
 				this.boundFinished.set(true);
+			else
+				this.boundFinished.set(false);
 		}
 		return this.boundFinished.get();
 	}
