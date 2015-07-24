@@ -80,7 +80,7 @@ class SharedData
 	 * 
 	 * @return Board
 	 */
-	public Board getBoard()
+	public synchronized Board getBoard()
 	{
 		if (!deque.isEmpty())
 			return deque.pop();
