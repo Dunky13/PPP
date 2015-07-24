@@ -160,7 +160,7 @@ class SharedData
 	/**
 	 * Increment bound of initialBoard unless solutions are found.
 	 */
-	public synchronized void incrementBound()
+	public void incrementBound()
 	{
 		if (!boundFinished())
 			return;
