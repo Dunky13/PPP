@@ -139,18 +139,14 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		data.getNodesWaiting().incrementAndGet();
 
 		int requestValue = rm.readInt();
-		int boundValue = rm.readInt();
 		rm.finish();
-		// Solution received
-		//		if (boundValue != data.getCurrentBound().get())
-		//			data.STOP();
 		if (requestValue > 0)
 			data.getSolutions().addAndGet(requestValue);
 
 		if (data.programFinished())
 			return;
 
-		Board replyValue = getBoardAfterWait(); // may block for some time
+		Board replyValue = getBoardAfterWait(true); // may block for some time
 		if (sendBoard(replyValue, sender))
 			data.getNodesWaiting().decrementAndGet();
 	}
@@ -248,7 +244,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 
 		data.getNodesWaiting().decrementAndGet();
-		Board b = getBoardAfterWait();
+		Board b = getBoardAfterWait(false);
 		if (b == null && programFinished(data.programFinished()))
 		{
 			data.getNodesWaiting().incrementAndGet();
@@ -292,11 +288,11 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 * @return Board
 	 * @throws InterruptedException
 	 */
-	private Board getBoardAfterWait()
+	private Board getBoardAfterWait(boolean getLast)
 	{
 		if (!incrementBound())
 			return null;
-		Board b = data.getWaitingBoard();
+		Board b = data.getWaitingBoard(getLast); //TODO: Error is here!
 		return b;
 	}
 
@@ -315,7 +311,11 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private boolean programFinished(boolean progFinished)
 	{
 		if (progFinished)
+		{
+			SharedData.notifyAll(data.getDeque());
 			SharedData.notifyAll(lock);
+		}
+
 		return progFinished;
 	}
 }

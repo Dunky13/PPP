@@ -3,7 +3,6 @@ package ida.ipl;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import ibis.ipl.IbisIdentifier;
 import ibis.ipl.ReceivePort;
@@ -21,7 +20,6 @@ class SharedData
 	private final AtomicInteger currentBound;
 	private Board initialBoard;
 	private BoardCache cache;
-	private final AtomicBoolean forceBoundStop;
 
 	public SharedData(Ida parent)
 	{
@@ -32,7 +30,6 @@ class SharedData
 		this.minimalQueueSize = new AtomicInteger(0);
 		this.nodesWaiting = new AtomicInteger(0);
 		this.currentBound = new AtomicInteger(0);
-		this.forceBoundStop = new AtomicBoolean(false);
 	}
 
 	public Ida getParent()
@@ -90,21 +87,24 @@ class SharedData
 	 * 
 	 * @return Board
 	 */
-	public Board getBoard()
+	public Board getBoard(boolean getLast)
 	{
-		if (!deque.isEmpty())
-			return deque.pop();
-		return null;
+		if (deque.isEmpty())
+			return null;
+		if (getLast)
+			return deque.removeLast();
+		return deque.pop();
 	}
 
-	public Board getWaitingBoard()
+	public Board getWaitingBoard(boolean getLast)
 	{
 		Board b = null;
 		do
 		{
-			while (deque.isEmpty() && !boundFinished())
-				SharedData.wait(deque, 50);
-			b = getBoard();
+			b = getBoard(getLast);
+			if (!deque.isEmpty() && !programFinished())
+				SharedData.wait(deque);
+
 		} while (b == null);
 		/*
 		 * If b is not null can return immedeatly
@@ -126,7 +126,7 @@ class SharedData
 		boolean bound = deque.isEmpty();
 		if (!this.senders.isEmpty())
 			bound = bound && this.nodesWaiting.get() == (this.senders.size() + 1);
-		return bound || this.forceBoundStop.get();
+		return bound;
 	}
 
 	public boolean useCache()
@@ -229,16 +229,6 @@ class SharedData
 	public void setCurrentBound(int bound)
 	{
 		this.currentBound.set(bound);
-	}
-
-	public void STOP()
-	{
-		this.forceBoundStop.set(true);
-		synchronized (deque)
-		{
-			while (!deque.isEmpty())
-				deque.remove();
-		}
 	}
 
 	public boolean addMoreBoardsToQueue()

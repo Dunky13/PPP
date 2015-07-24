@@ -35,7 +35,7 @@ public class Slave implements MessageUpcall
 		openPorts(master);
 
 		// Send an initialization message
-		sendInt(Ida.INIT_VALUE, Ida.INIT_VALUE);
+		sendInt(Ida.INIT_VALUE);
 
 		// Make sure this thread doesn't finish prematurely
 		synchronized (this)
@@ -60,12 +60,12 @@ public class Slave implements MessageUpcall
 			rm.finish();
 			if (board == null) // prevent null pointer exceptions
 			{
-				sendInt(Slave.NO_BOARD, Slave.NO_BOARD); // If in some miraculous case no board is received return an error to the Master, this also ensures the slave is kept
+				sendInt(Slave.NO_BOARD); // If in some miraculous case no board is received return an error to the Master, this also ensures the slave is kept
 				// in the loop of messages.
 				return;
 			}
 			int solution = calculateJob(board);
-			sendInt(solution, board.bound());
+			sendInt(solution);
 		}
 	}
 
@@ -134,11 +134,10 @@ public class Slave implements MessageUpcall
 	 * @param value
 	 * @throws IOException
 	 */
-	private void sendInt(int value, int bound) throws IOException
+	private void sendInt(int value) throws IOException
 	{
 		WriteMessage wm = masterSend.newMessage();
 		wm.writeInt(value);
-		wm.writeInt(bound);
 		wm.finish();
 	}
 }
