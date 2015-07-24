@@ -146,6 +146,9 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		if (requestValue > 0)
 			data.getSolutions().addAndGet(requestValue);
 
+		if (data.programFinished())
+			return;
+
 		Board replyValue = getBoardAfterWait(); // may block for some time
 		if (sendBoard(replyValue, sender))
 			data.getWaitingForWork().remove(sender);
@@ -153,9 +156,9 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 	private boolean sendBoard(Board board, IbisIdentifier destination) throws IOException
 	{
+		SendPort port = data.getSenders().get(destination);
 		if (data.programFinished())
 			return false;
-		SendPort port = data.getSenders().get(destination);
 		WriteMessage wm = port.newMessage();
 		wm.writeBoolean(false);
 		wm.writeObject(board);
