@@ -94,10 +94,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			SendPort sender = data.getParent().ibis.createSendPort(Ida.portType);
 			sender.connect(worker, "slave");
 			data.getSenders().put(worker, sender);
-			synchronized (data.getWaitingForWork())
-			{
-				data.getWaitingForWork().push(worker);
-			}
 			data.calculateMinimumQueueSize();
 		}
 		catch (IOException e)
@@ -120,6 +116,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			SendPort sender = data.getSenders().get(worker);
 			sender.close();
 			data.getSenders().remove(worker);
+			data.getNodesWaiting().decrementAndGet();
 		}
 		catch (ConnectionClosedException e)
 		{
@@ -136,11 +133,9 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 		// Process the incoming message and decrease the number of busy workers
 		IbisIdentifier sender = rm.origin().ibisIdentifier();
-		int requestValue = 0;
+		data.getNodesWaiting().incrementAndGet();
 
-		data.getWaitingForWork().add(sender);
-
-		requestValue = rm.readInt();
+		int requestValue = rm.readInt();
 		rm.finish();
 		// Solution received
 		if (requestValue > 0)
@@ -151,7 +146,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 		Board replyValue = getBoardAfterWait(); // may block for some time
 		if (sendBoard(replyValue, sender))
-			data.getWaitingForWork().remove(sender);
+			data.getNodesWaiting().decrementAndGet();
 	}
 
 	private boolean sendBoard(Board board, IbisIdentifier destination)
@@ -246,7 +241,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	/**
 	 * Looped to get boards from the queue
 	 * 
-	 * @throws IOException @throws
+	 * @throws IOException
+	 * 			@throws
 	 */
 	private void calculateQueueBoard()
 	{

@@ -1,8 +1,6 @@
 package ida.ipl;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -14,11 +12,11 @@ class SharedData
 {
 	private final Ida parent;
 	private final HashMap<IbisIdentifier, SendPort> senders;
-	private final AtomicInteger minimalQueueSize;
-	private final Deque<IbisIdentifier> waitingForWork;
 	private ReceivePort receiver;
 	private final ConcurrentLinkedDeque<Board> deque;
 	private final AtomicInteger solutions;
+	private final AtomicInteger minimalQueueSize;
+	private final AtomicInteger nodesWaiting;
 	private Board initialBoard;
 	private BoardCache cache;
 
@@ -26,11 +24,10 @@ class SharedData
 	{
 		this.parent = parent;
 		this.senders = new HashMap<IbisIdentifier, SendPort>();
-		this.waitingForWork = new ArrayDeque<IbisIdentifier>();
-		this.deque = new ConcurrentLinkedDeque<Board>();// new
-		// ArrayDeque<Board>();
+		this.deque = new ConcurrentLinkedDeque<Board>();
 		this.solutions = new AtomicInteger(0);
 		this.minimalQueueSize = new AtomicInteger(0);
+		this.nodesWaiting = new AtomicInteger(0);
 	}
 
 	public Ida getParent()
@@ -41,11 +38,6 @@ class SharedData
 	public HashMap<IbisIdentifier, SendPort> getSenders()
 	{
 		return senders;
-	}
-
-	public Deque<IbisIdentifier> getWaitingForWork()
-	{
-		return waitingForWork;
 	}
 
 	public ReceivePort getReceiver()
@@ -61,6 +53,11 @@ class SharedData
 	public AtomicInteger getSolutions()
 	{
 		return solutions;
+	}
+
+	public AtomicInteger getNodesWaiting()
+	{
+		return nodesWaiting;
 	}
 
 	public int getMinimalQueueSize()
@@ -119,10 +116,7 @@ class SharedData
 		boolean bound = deque.isEmpty();
 		if (this.senders.size() > 0)
 		{
-			synchronized (waitingForWork)
-			{
-				bound = bound && this.waitingForWork.size() == this.senders.size();
-			}
+			bound = bound && this.nodesWaiting.get() == this.senders.size();
 		}
 		return bound;
 	}
