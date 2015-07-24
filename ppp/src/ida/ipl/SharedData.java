@@ -87,13 +87,16 @@ class SharedData
 	 * 
 	 * @return Board
 	 */
-	public synchronized Board getBoard(boolean getLast)
+	public Board getBoard(boolean getLast)
 	{
-		if (deque.isEmpty())
-			return null;
-		if (getLast)
-			return deque.removeLast();
-		return deque.pop();
+		synchronized (deque)
+		{
+			if (deque.isEmpty())
+				return null;
+			if (getLast)
+				return deque.removeLast();
+			return deque.pop();
+		}
 	}
 
 	public Board getWaitingBoard(boolean getLast)
@@ -102,7 +105,7 @@ class SharedData
 		do
 		{
 			b = getBoard(getLast);
-		} while (b == null && !deque.isEmpty() && !programFinished() && SharedData.wait(deque));
+		} while (b == null && (deque.isEmpty() && !programFinished() && SharedData.wait(deque)));
 		/*
 		 * If b is not null can return immedeatly
 		 * Else the solution is not yet found AND the queue is empty - then wait (wait always return true, is notified when something is added to the queue)
@@ -157,9 +160,9 @@ class SharedData
 	/**
 	 * Increment bound of initialBoard unless solutions are found.
 	 */
-	public void incrementBound()
+	public synchronized void incrementBound()
 	{
-		if (!deque.isEmpty())
+		if (!boundFinished())
 			return;
 		synchronized (this.initialBoard)
 		{

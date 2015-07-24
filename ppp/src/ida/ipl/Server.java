@@ -238,7 +238,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	/**
 	 * Looped to get boards from the queue
 	 * 
-	 * @throws IOException @throws
+	 * @throws IOException
+	 * 			@throws
 	 */
 	private void calculateQueueBoard()
 	{
@@ -303,8 +304,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 		if (programFinished(data.programFinished()))
 			return false;
-		if (data.boundFinished())
-			data.incrementBound();
+		data.incrementBound();
 		return true;
 	}
 
