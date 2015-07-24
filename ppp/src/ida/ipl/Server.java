@@ -250,7 +250,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		data.getNodesWaiting().decrementAndGet();
 		Board b = getBoardAfterWait();
 		if (b == null && programFinished(data.programFinished()))
+		{
+			data.getNodesWaiting().incrementAndGet();
 			return;
+		}
 		calculateBoardSolution(b);
 		data.getNodesWaiting().incrementAndGet();
 	}
@@ -266,7 +269,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		else
 		{
 			ArrayList<Board> boards = data.useCache() ? b.makeMoves(data.getCache()) : b.makeMoves();
-			if (!boards.isEmpty() && data.getDeque().size() < data.getMinimalQueueSize()) // If queue not full 'enough' fill it so the slaves have something to do as well.
+			if (!boards.isEmpty() && data.addMoreBoardsToQueue()) // If queue not full 'enough' fill it so the slaves have something to do as well.
 			{
 				Board tmpBoard = boards.remove(0); // Calculate only one board instead of all
 				data.addBoards(boards);

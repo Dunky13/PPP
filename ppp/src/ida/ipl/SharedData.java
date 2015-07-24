@@ -90,7 +90,7 @@ class SharedData
 	 * 
 	 * @return Board
 	 */
-	public synchronized Board getBoard()
+	public Board getBoard()
 	{
 		if (!deque.isEmpty())
 			return deque.pop();
@@ -102,8 +102,10 @@ class SharedData
 		Board b = null;
 		do
 		{
+			while (deque.isEmpty() && !boundFinished())
+				SharedData.wait(deque, 50);
 			b = getBoard();
-		} while (b == null && DequeIsEmpty() && !programFinished() && SharedData.wait(deque));
+		} while (b == null);
 		/*
 		 * If b is not null can return immedeatly
 		 * Else the solution is not yet found AND the queue is empty - then wait (wait always return true, is notified when something is added to the queue)
@@ -127,11 +129,6 @@ class SharedData
 		return bound || this.forceBoundStop.get();
 	}
 
-	public boolean DequeIsEmpty()
-	{
-		return this.deque.isEmpty();
-	}
-
 	public boolean useCache()
 	{
 		return this.cache != null;
@@ -151,10 +148,8 @@ class SharedData
 
 		ArrayList<Board> boards = this.useCache() ? initialBoard.makeMoves(getCache()) : initialBoard.makeMoves();
 
-		for (Board b : boards)
-		{
-			deque.addFirst(b);
-		}
+		addBoards(boards);
+
 	}
 
 	public void setCache(BoardCache cache)
@@ -196,16 +191,24 @@ class SharedData
 
 	public void calculateMinimumQueueSize()
 	{
-		this.minimalQueueSize.set((this.senders.size() + 1) * 4);
+		this.minimalQueueSize.set((this.senders.size() + 1) * 2);
 	}
 
 	public static boolean wait(Object o)
+	{
+		return SharedData.wait(o, null);
+	}
+
+	public static boolean wait(Object o, Integer i)
 	{
 		synchronized (o)
 		{
 			try
 			{
-				o.wait();
+				if (i == null)
+					o.wait();
+				else
+					o.wait(i.longValue());
 			}
 			catch (InterruptedException e)
 			{
@@ -236,6 +239,11 @@ class SharedData
 			while (!deque.isEmpty())
 				deque.remove();
 		}
+	}
+
+	public boolean addMoreBoardsToQueue()
+	{
+		return deque.size() < minimalQueueSize.get();
 	}
 
 }
