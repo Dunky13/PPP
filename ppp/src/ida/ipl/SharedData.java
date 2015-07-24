@@ -114,10 +114,8 @@ class SharedData
 	public boolean boundFinished()
 	{
 		boolean bound = deque.isEmpty();
-		if (this.senders.size() > 0)
-		{
+		if (!this.senders.isEmpty())
 			bound = bound && this.nodesWaiting.get() == this.senders.size();
-		}
 		return bound;
 	}
 

@@ -241,7 +241,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	/**
 	 * Looped to get boards from the queue
 	 * 
-	 * @throws IOException @throws
+	 * @throws IOException
+	 * 			@throws
 	 */
 	private void calculateQueueBoard()
 	{
@@ -288,11 +289,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 */
 	private Board getBoardAfterWait()
 	{
-		// Just to catch in case the job has already finished.
-		if (programFinished(data.programFinished()))
+		if (!incrementBound())
 			return null;
-		if (data.boundFinished())
-			incrementBound();
 		Board b = data.getBoard();
 		return b;
 	}
@@ -300,11 +298,13 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	/**
 	 * Increment bound of initialBoard unless solutions are found.
 	 */
-	private void incrementBound()
+	private boolean incrementBound()
 	{
 		if (programFinished(data.programFinished()))
-			return;
-		data.incrementBound();
+			return false;
+		if (data.boundFinished())
+			data.incrementBound();
+		return true;
 	}
 
 	private boolean programFinished(boolean progFinished)
