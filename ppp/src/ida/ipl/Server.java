@@ -241,13 +241,14 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	/**
 	 * Looped to get boards from the queue
 	 * 
-	 * @throws IOException @throws
+	 * @throws IOException
+	 * 			@throws
 	 */
 	private void calculateQueueBoard()
 	{
 
 		Board b = getBoardAfterWait();
-		if (programFinished(data.programFinished()) && b == null)
+		if (b == null && programFinished(data.programFinished()))
 			return;
 		calculateBoardSolution(b);
 	}
