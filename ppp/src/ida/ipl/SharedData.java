@@ -102,10 +102,7 @@ class SharedData
 		do
 		{
 			b = getBoard(getLast);
-			if (!deque.isEmpty() && !programFinished())
-				SharedData.wait(deque);
-
-		} while (b == null);
+		} while (b == null && !deque.isEmpty() && !programFinished() && SharedData.wait(deque));
 		/*
 		 * If b is not null can return immedeatly
 		 * Else the solution is not yet found AND the queue is empty - then wait (wait always return true, is notified when something is added to the queue)
