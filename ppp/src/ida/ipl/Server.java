@@ -139,8 +139,11 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		data.getNodesWaiting().incrementAndGet();
 
 		int requestValue = rm.readInt();
+		int boundValue = rm.readInt();
 		rm.finish();
 		// Solution received
+		if (boundValue != data.getCurrentBound().get())
+			data.STOP();
 		if (requestValue > 0)
 			data.getSolutions().addAndGet(requestValue);
 
