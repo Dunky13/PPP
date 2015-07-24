@@ -236,7 +236,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	/**
 	 * Looped to get boards from the queue
 	 * 
-	 * @throws IOException @throws
+	 * @throws IOException
+	 * 			@throws
 	 */
 	private void calculateQueueBoard()
 	{
@@ -244,15 +245,15 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		Board b = getBoardAfterWait();
 		if (programFinished(data.programFinished()))
 			return;
-		int solution = calculateBoardSolution(b);
-		if (solution > 0) // No need to add 0 as a solution useless locking of the variable.
-			data.getSolutions().addAndGet(solution);
+		Integer solution = calculateBoardSolution(b);
+		if (solution != null && solution > 0) // No need to add 0 as a solution useless locking of the variable.
+			data.getSolutions().addAndGet(solution.intValue());
 	}
 
-	private int calculateBoardSolution(Board b)
+	private Integer calculateBoardSolution(Board b)
 	{
 		if (b == null) // Should happen only if finished and needs to be caught to prevent null pointer exceptions.
-			return -1;
+			return null;
 		if (b.distance() == 1)
 			return 1;
 		else if (b.distance() > b.bound())
@@ -270,8 +271,12 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			else // Queue is full enough for the slaves to work so loop over all results to get the solutions.
 			{
 				int result = 0;
+				Integer tmpRes;
 				for (Board b2 : boards)
-					result += calculateBoardSolution(b2);
+				{
+					if ((tmpRes = calculateBoardSolution(b2)) != null)
+						result += tmpRes.intValue();
+				}
 				return result;
 			}
 		}
