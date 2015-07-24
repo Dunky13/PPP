@@ -87,7 +87,7 @@ class SharedData
 	 * 
 	 * @return Board
 	 */
-	public Board getBoard(boolean getLast)
+	public synchronized Board getBoard(boolean getLast)
 	{
 		if (deque.isEmpty())
 			return null;
