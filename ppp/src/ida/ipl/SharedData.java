@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import ibis.ipl.IbisIdentifier;
 import ibis.ipl.ReceivePort;
@@ -21,7 +20,6 @@ class SharedData
 	private final AtomicInteger solutions;
 	private Board initialBoard;
 	private BoardCache cache;
-	private AtomicBoolean boundFinished;
 
 	public SharedData(Ida parent)
 	{
@@ -31,7 +29,6 @@ class SharedData
 		this.deque = new ConcurrentLinkedDeque<Board>();// new
 		// ArrayDeque<Board>();
 		this.solutions = new AtomicInteger(0);
-		this.boundFinished = new AtomicBoolean(false);
 	}
 
 	public Ida getParent()
@@ -83,16 +80,13 @@ class SharedData
 
 	public boolean boundFinished()
 	{
-		if (this.boundFinished.get())
-			return true;
 		synchronized (waitingForWork)
 		{
-			if (this.waitingForWork.size() == this.senders.size() && deque.isEmpty())
-				this.boundFinished.set(true);
+			if (deque.isEmpty() && this.waitingForWork.size() == this.senders.size())
+				return true;
 			else
-				this.boundFinished.set(false);
+				return false;
 		}
-		return this.boundFinished.get();
 	}
 
 	public void setReceiver(ReceivePort receiver)
