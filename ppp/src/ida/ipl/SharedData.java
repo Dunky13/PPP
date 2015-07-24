@@ -76,11 +76,11 @@ class SharedData
 
 	public boolean isFinished()
 	{
-		if (this.finished.get())
+		if (this.finished.get() || this.solutions.get() > 0)
 			return true;
 		synchronized (waitingForWork)
 		{
-			if (this.waitingForWork.size() == this.senders.size() && deque.isEmpty())
+			if (this.waitingForWork.size() == this.senders.size() && deque.isEmpty() && this.solutions.get() > 0)
 				this.finished.set(true);
 		}
 		return this.finished.get();

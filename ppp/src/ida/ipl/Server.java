@@ -29,13 +29,13 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		@Override
 		public void run()
 		{
-			while (!data.isFinished())
+			do
 			{
 				calculateQueueBoard();
-			}
+			} while (!data.isFinished());
 			SharedData.notifyAll(lock);
 		}
-	};;
+	};
 
 	public Server(Ida parent)
 	{
@@ -237,8 +237,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	/**
 	 * Looped to get boards from the queue
 	 * 
-	 * @throws IOException
-	 * 			@throws
+	 * @throws IOException @throws
 	 */
 	private void calculateQueueBoard()
 	{
@@ -307,7 +306,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 */
 	private void incrementBound()
 	{
-		if (data.getSolutions().get() > 0)
+		if (data.isFinished())
 		{
 			SharedData.notifyAll(lock);
 			return;
