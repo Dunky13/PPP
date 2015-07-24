@@ -97,7 +97,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			synchronized (data.getWaitingForWork())
 			{
 				data.getWaitingForWork().push(worker);
-				data.getWaitingForWork().notifyAll();
 			}
 		}
 		catch (IOException e)
@@ -132,7 +131,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	}
 
 	@Override
-	public void upcall(ReadMessage rm) throws IOException, ClassNotFoundException
+	public void upcall(ReadMessage rm) throws IOException
 	{
 		// Process the incoming message and decrease the number of busy workers
 		IbisIdentifier sender = rm.origin().ibisIdentifier();
@@ -154,16 +153,23 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			data.getWaitingForWork().remove(sender);
 	}
 
-	private boolean sendBoard(Board board, IbisIdentifier destination) throws IOException
+	private boolean sendBoard(Board board, IbisIdentifier destination)
 	{
 		SendPort port = data.getSenders().get(destination);
 		if (data.programFinished())
 			return false;
-		WriteMessage wm = port.newMessage();
-		wm.writeBoolean(false);
-		wm.writeObject(board);
-		wm.finish();
-		return true;
+		try
+		{
+			WriteMessage wm = port.newMessage();
+			wm.writeBoolean(false);
+			wm.writeObject(board);
+			wm.finish();
+			return true;
+		}
+		catch (IOException e)
+		{
+			return false;
+		}
 	}
 
 	private void execution() throws IOException
@@ -239,8 +245,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	/**
 	 * Looped to get boards from the queue
 	 * 
-	 * @throws IOException
-	 * 			@throws
+	 * @throws IOException @throws
 	 */
 	private void calculateQueueBoard()
 	{
