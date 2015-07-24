@@ -80,13 +80,15 @@ class SharedData
 
 	public boolean boundFinished()
 	{
-		synchronized (waitingForWork)
+		boolean bound = deque.isEmpty();
+		if (this.senders.size() > 0)
 		{
-			if (deque.isEmpty() && this.waitingForWork.size() == this.senders.size())
-				return true;
-			else
-				return false;
+			synchronized (waitingForWork)
+			{
+				bound = bound && this.waitingForWork.size() == this.senders.size();
+			}
 		}
+		return bound;
 	}
 
 	public void setReceiver(ReceivePort receiver)
