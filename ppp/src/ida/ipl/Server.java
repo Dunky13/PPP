@@ -241,8 +241,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	/**
 	 * Looped to get boards from the queue
 	 * 
-	 * @throws IOException
-	 * 			@throws
+	 * @throws IOException @throws
 	 */
 	private void calculateQueueBoard()
 	{
@@ -250,39 +249,30 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		Board b = getBoardAfterWait();
 		if (programFinished(data.programFinished()))
 			return;
-		Integer solution = calculateBoardSolution(b);
-		if (solution != null && solution > 0) // No need to add 0 as a solution useless locking of the variable.
-			data.getSolutions().addAndGet(solution.intValue());
+		calculateBoardSolution(b);
 	}
 
-	private Integer calculateBoardSolution(Board b)
+	private void calculateBoardSolution(Board b)
 	{
 		if (b == null) // Should happen only if finished and needs to be caught to prevent null pointer exceptions.
-			return null;
+			return;
 		if (b.distance() == 1)
-			return 1;
+			data.getSolutions().incrementAndGet();
 		else if (b.distance() > b.bound())
-			return 0;
+			return;
 		else
 		{
 			ArrayList<Board> boards = data.useCache() ? b.makeMoves(data.getCache()) : b.makeMoves();
-			if (data.getDeque().size() < data.getMinimalQueueSize()) // If queue not full 'enough' fill it so the slaves have something to do as well.
+			if (!boards.isEmpty() && data.getDeque().size() < data.getMinimalQueueSize()) // If queue not full 'enough' fill it so the slaves have something to do as well.
 			{
-				Board b3 = boards.remove(0); // Calculate only one board instead of all
+				Board tmpBoard = boards.remove(0); // Calculate only one board instead of all
 				data.addBoards(boards);
-
-				return calculateBoardSolution(b3);
+				calculateBoardSolution(tmpBoard);
 			}
 			else // Queue is full enough for the slaves to work so loop over all results to get the solutions.
 			{
-				int result = 0;
-				Integer tmpRes;
-				for (Board b2 : boards)
-				{
-					if ((tmpRes = calculateBoardSolution(b2)) != null)
-						result += tmpRes.intValue();
-				}
-				return result;
+				for (Board tmpBoard2 : boards)
+					calculateBoardSolution(tmpBoard2);
 			}
 		}
 	}
@@ -317,10 +307,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		data.incrementBound();
 	}
 
-	private boolean programFinished(boolean b)
+	private boolean programFinished(boolean progFinished)
 	{
-		if (b)
+		if (progFinished)
 			SharedData.notifyAll(lock);
-		return b;
+		return progFinished;
 	}
 }
