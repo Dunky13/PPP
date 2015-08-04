@@ -88,6 +88,11 @@ class SharedData
 		return cache;
 	}
 
+	public boolean useCache()
+	{
+		return this.cache != null;
+	}
+
 	public boolean programFinished()
 	{
 
@@ -101,17 +106,12 @@ class SharedData
 		return progFinished;
 	}
 
-	public boolean boundFinished()
+	private boolean boundFinished()
 	{
 		boolean bound = deque.isEmpty();
 		if (!this.senders.isEmpty()) //If there are slaves connected
 			bound = bound && this.nodesWaiting.get() == (this.senders.size() + 1);
 		return bound;
-	}
-
-	public boolean useCache()
-	{
-		return this.cache != null;
 	}
 
 	/**
