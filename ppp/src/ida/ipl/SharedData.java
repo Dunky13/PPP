@@ -33,6 +33,11 @@ class SharedData
 		this.currentBound = new AtomicInteger(0);
 	}
 
+	void getters()
+	{
+
+	}
+
 	public Ida getParent()
 	{
 		return parent;
@@ -83,6 +88,32 @@ class SharedData
 		return cache;
 	}
 
+	public boolean programFinished()
+	{
+
+		boolean progFinished = this.solutions.get() > 0 && this.boundFinished();
+		if (progFinished)
+		{
+			SharedData.notifyAll(deque);
+			SharedData.notifyAll(lock);
+		}
+
+		return progFinished;
+	}
+
+	public boolean boundFinished()
+	{
+		boolean bound = deque.isEmpty();
+		if (!this.senders.isEmpty()) //If there are slaves connected
+			bound = bound && this.nodesWaiting.get() == (this.senders.size() + 1);
+		return bound;
+	}
+
+	public boolean useCache()
+	{
+		return this.cache != null;
+	}
+
 	/**
 	 * Pop Board from queue if it is not empty.
 	 * 
@@ -100,13 +131,26 @@ class SharedData
 		}
 	}
 
-	public Board getWaitingBoard(boolean getLast)
+	/**
+	 * Returns board from queue, if queue is empty wait for queue to be filled
+	 * again.
+	 * 
+	 * Blocking property
+	 * 
+	 * @return Board
+	 * @throws InterruptedException
+	 */
+	public Board getBoardAfterWait(boolean getLast)
 	{
+		if (programFinished())
+			return null;
 		Board b = null;
 		do
 		{
+			if (boundFinished())
+				incrementBound();
 			b = getBoard(getLast);
-		} while (b == null && (deque.isEmpty() && !programFinished() && SharedData.wait(deque)));
+		} while (b == null && (deque.isEmpty() && !programFinished() && SharedData.wait(deque, 50)));
 		/*
 		 * If b is not null can return immedeatly
 		 * Else the solution is not yet found AND the queue is empty - then wait (wait always return true, is notified when something is added to the queue)
@@ -115,24 +159,9 @@ class SharedData
 		return b;
 	}
 
-	private boolean programFinished()
+	void setters()
 	{
-		if (this.solutions.get() > 0 && this.boundFinished())
-			return true;
-		return false;
-	}
 
-	public boolean boundFinished()
-	{
-		boolean bound = deque.isEmpty();
-		if (!this.senders.isEmpty())
-			bound = bound && this.nodesWaiting.get() == (this.senders.size() + 1);
-		return bound;
-	}
-
-	public boolean useCache()
-	{
-		return this.cache != null;
 	}
 
 	public void setReceiver(ReceivePort receiver)
@@ -190,9 +219,24 @@ class SharedData
 		SharedData.notifyAll(deque);
 	}
 
+	void calculators()
+	{
+
+	}
+
 	public void calculateMinimumQueueSize()
 	{
 		this.minimalQueueSize.set((this.senders.size() + 1) * 2);
+	}
+
+	public boolean addMoreBoardsToQueue()
+	{
+		return deque.size() < minimalQueueSize.get();
+	}
+
+	void statics()
+	{
+
 	}
 
 	public static boolean wait(Object o)
@@ -235,58 +279,6 @@ class SharedData
 			o.notifyAll();
 		}
 		return true;
-	}
-
-	public void setCurrentBound(int bound)
-	{
-		this.currentBound.set(bound);
-	}
-
-	public boolean addMoreBoardsToQueue()
-	{
-		return deque.size() < minimalQueueSize.get();
-	}
-
-	/**
-	 * Returns board from queue, if queue is empty wait for queue to be filled
-	 * again.
-	 * 
-	 * Blocking property
-	 * 
-	 * @return Board
-	 * @throws InterruptedException
-	 */
-	public Board getBoardAfterWait(boolean getLast)
-	{
-		if (!incrBound())
-			return null;
-		Board b = getWaitingBoard(getLast); //TODO: Error is here!
-		return b;
-	}
-
-	/**
-	 * Increment bound of initialBoard unless solutions are found.
-	 * 
-	 * @return False if program is finished, else return true
-	 */
-	public boolean incrBound()
-	{
-		if (progFinished())
-			return false;
-		incrementBound();
-		return true;
-	}
-
-	public boolean progFinished()
-	{
-		boolean progFinished = this.programFinished();
-		if (progFinished)
-		{
-			SharedData.notifyAll(deque);
-			SharedData.notifyAll(lock);
-		}
-
-		return progFinished;
 	}
 
 }

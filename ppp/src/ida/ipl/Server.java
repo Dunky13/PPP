@@ -132,7 +132,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		if (requestValue > 0)
 			data.getSolutions().addAndGet(requestValue);
 
-		if (data.progFinished())
+		if (data.programFinished())
 			return;
 
 		Board replyValue = data.getBoardAfterWait(true); // may block for some time
@@ -143,7 +143,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private boolean sendBoard(Board board, IbisIdentifier destination)
 	{
 		SendPort port = data.getSenders().get(destination);
-		if (data.progFinished())
+		if (data.programFinished())
 			return false;
 		try
 		{
@@ -243,7 +243,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				calculateQueueBoard(b);
 
 				data.getNodesWaiting().incrementAndGet();
-			} while (!data.progFinished());
+			} while (!data.programFinished());
 		}
 
 		/**
@@ -254,7 +254,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		private void calculateQueueBoard(Board b)
 		{
 
-			if (b == null && data.progFinished())
+			if (b == null && data.programFinished())
 			{
 				data.getNodesWaiting().incrementAndGet();
 				return;
