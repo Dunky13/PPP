@@ -10,6 +10,7 @@ import ibis.ipl.SendPort;
 
 class SharedData
 {
+	public static final Object lock = new Object();
 	private final Ida parent;
 	private final HashMap<IbisIdentifier, SendPort> senders;
 	private ReceivePort receiver;
@@ -114,7 +115,7 @@ class SharedData
 		return b;
 	}
 
-	public boolean programFinished()
+	private boolean programFinished()
 	{
 		if (this.solutions.get() > 0 && this.boundFinished())
 			return true;
@@ -196,7 +197,17 @@ class SharedData
 
 	public static boolean wait(Object o)
 	{
-		return SharedData.wait(o, null);
+		synchronized (o)
+		{
+			try
+			{
+				o.wait();
+			}
+			catch (InterruptedException e)
+			{
+			}
+		}
+		return true;
 	}
 
 	public static boolean wait(Object o, Integer i)
@@ -234,6 +245,48 @@ class SharedData
 	public boolean addMoreBoardsToQueue()
 	{
 		return deque.size() < minimalQueueSize.get();
+	}
+
+	/**
+	 * Returns board from queue, if queue is empty wait for queue to be filled
+	 * again.
+	 * 
+	 * Blocking property
+	 * 
+	 * @return Board
+	 * @throws InterruptedException
+	 */
+	public Board getBoardAfterWait(boolean getLast)
+	{
+		if (!incrBound())
+			return null;
+		Board b = getWaitingBoard(getLast); //TODO: Error is here!
+		return b;
+	}
+
+	/**
+	 * Increment bound of initialBoard unless solutions are found.
+	 * 
+	 * @return False if program is finished, else return true
+	 */
+	public boolean incrBound()
+	{
+		if (progFinished())
+			return false;
+		incrementBound();
+		return true;
+	}
+
+	public boolean progFinished()
+	{
+		boolean progFinished = this.programFinished();
+		if (progFinished)
+		{
+			SharedData.notifyAll(deque);
+			SharedData.notifyAll(lock);
+		}
+
+		return progFinished;
 	}
 
 }

@@ -15,30 +15,19 @@ import ibis.ipl.WriteMessage;
 
 public class Server implements MessageUpcall, ReceivePortConnectUpcall
 {
-	private final static Object lock = new Object();
 
 	private final SharedData data; // SharedData object is used to share the
 	// data that is accessible to the Server
 	// class between threads (The solving thread
 	// and Upcall threads)
 
-	private Runnable calculation = new Runnable()
-	{
-
-		@Override
-		public void run()
-		{
-			do
-			{
-				calculateQueueBoard();
-			} while (!data.programFinished());
-			programFinished(true);
-		}
-	};
+	private ServerCalculator calculation;
 
 	public Server(Ida parent)
+
 	{
 		this.data = new SharedData(parent);
+		this.calculation = new ServerCalculator(data);
 	}
 
 	public void run(String fileName, boolean useCache) throws IOException
@@ -143,10 +132,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		if (requestValue > 0)
 			data.getSolutions().addAndGet(requestValue);
 
-		if (data.programFinished())
+		if (data.progFinished())
 			return;
 
-		Board replyValue = getBoardAfterWait(true); // may block for some time
+		Board replyValue = data.getBoardAfterWait(true); // may block for some time
 		if (sendBoard(replyValue, sender))
 			data.getNodesWaiting().decrementAndGet();
 	}
@@ -154,7 +143,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private boolean sendBoard(Board board, IbisIdentifier destination)
 	{
 		SendPort port = data.getSenders().get(destination);
-		if (data.programFinished())
+		if (data.progFinished())
 			return false;
 		try
 		{
@@ -185,7 +174,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		t.start();
 
 		// Wait for ALL calclations to finish and to find a solution.
-		SharedData.wait(lock);
+		SharedData.wait(SharedData.lock);
 
 		shutdown();
 
@@ -235,87 +224,73 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 	}
 
-	/**
-	 * Looped to get boards from the queue
-	 * 
-	 * @throws IOException
-	 * 			@throws
-	 */
-	private void calculateQueueBoard()
+	private class ServerCalculator implements Runnable
 	{
+		SharedData data;
 
-		data.getNodesWaiting().decrementAndGet();
-		Board b = getBoardAfterWait(false);
-		if (b == null && programFinished(data.programFinished()))
+		ServerCalculator(SharedData data)
 		{
-			data.getNodesWaiting().incrementAndGet();
-			return;
+			this.data = data;
 		}
-		calculateBoardSolution(b);
-		data.getNodesWaiting().incrementAndGet();
-	}
 
-	private void calculateBoardSolution(Board b)
-	{
-		if (b == null) // Should happen only if finished and needs to be caught to prevent null pointer exceptions.
-			return;
-		if (b.distance() == 1)
-			data.getSolutions().incrementAndGet();
-		else if (b.distance() > b.bound())
-			return;
-		else
+		public void run()
 		{
-			ArrayList<Board> boards = data.useCache() ? b.makeMoves(data.getCache()) : b.makeMoves();
-			if (!boards.isEmpty() && data.addMoreBoardsToQueue()) // If queue not full 'enough' fill it so the slaves have something to do as well.
+			do
 			{
-				Board tmpBoard = boards.remove(0); // Calculate only one board instead of all
-				data.addBoards(boards);
-				calculateBoardSolution(tmpBoard);
-			}
-			else // Queue is full enough for the slaves to work so loop over all results to get the solutions.
-			{
-				for (Board tmpBoard2 : boards)
-					calculateBoardSolution(tmpBoard2);
-			}
+				data.getNodesWaiting().decrementAndGet();
+				Board b = data.getBoardAfterWait(false);
+
+				calculateQueueBoard(b);
+
+				data.getNodesWaiting().incrementAndGet();
+			} while (!data.progFinished());
 		}
-	}
 
-	/**
-	 * Returns board from queue, if queue is empty wait for queue to be filled
-	 * again.
-	 * 
-	 * Blocking property
-	 * 
-	 * @return Board
-	 * @throws InterruptedException
-	 */
-	private Board getBoardAfterWait(boolean getLast)
-	{
-		if (!incrementBound())
-			return null;
-		Board b = data.getWaitingBoard(getLast); //TODO: Error is here!
-		return b;
-	}
-
-	/**
-	 * Increment bound of initialBoard unless solutions are found.
-	 */
-	private boolean incrementBound()
-	{
-		if (programFinished(data.programFinished()))
-			return false;
-		data.incrementBound();
-		return true;
-	}
-
-	private boolean programFinished(boolean progFinished)
-	{
-		if (progFinished)
+		/**
+		 * Looped to get boards from the queue
+		 * 
+		 * @throws IOException @throws
+		 */
+		private void calculateQueueBoard(Board b)
 		{
-			SharedData.notifyAll(data.getDeque());
-			SharedData.notifyAll(lock);
+
+			if (b == null && data.progFinished())
+			{
+				data.getNodesWaiting().incrementAndGet();
+				return;
+			}
+			if (b == null) // Should happen only if finished and needs to be caught to prevent null pointer exceptions.
+				return;
+
+			int solution = calculateBoardSolution(b);
+			if (solution > 0)
+				data.getSolutions().addAndGet(solution);
+
 		}
 
-		return progFinished;
+		private int calculateBoardSolution(Board b)
+		{
+			if (b.distance() == 1)
+				return 1;
+			else if (b.distance() > b.bound())
+				return 0;
+			else
+			{
+				ArrayList<Board> boards = data.useCache() ? b.makeMoves(data.getCache()) : b.makeMoves();
+				if (!boards.isEmpty() && data.addMoreBoardsToQueue()) // If queue not full 'enough' fill it so the slaves have something to do as well.
+				{
+					Board tmpBoard = boards.remove(0); // Calculate only one board instead of all
+					data.addBoards(boards);
+					return calculateBoardSolution(tmpBoard);
+				}
+				else // Queue is full enough for the slaves to work so loop over all results to get the solutions.
+				{
+					int solution = 0;
+					for (Board tmpBoard2 : boards)
+						solution += calculateBoardSolution(tmpBoard2);
+					return solution;
+				}
+			}
+		}
 	}
 }
