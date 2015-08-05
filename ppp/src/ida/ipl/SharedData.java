@@ -129,7 +129,7 @@ class SharedData
 	{
 		if (programFinished())
 			return null;
-		if (this.bStatus == BoundStatus.TOCHANGE)
+		if (boundFinished() && this.bStatus == BoundStatus.TOCHANGE)
 			incrementBound();
 		try
 		{
