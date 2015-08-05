@@ -326,7 +326,7 @@ class SharedData
 			this.mmsgs.put(sendPort, wm);
 			return;
 		}
-		WriteMessage oldWM = this.mmsgs.replace(sendPort, wm);
+		WriteMessage oldWM = this.mmsgs.put(sendPort, wm);
 		try
 		{
 			oldWM.finish();
