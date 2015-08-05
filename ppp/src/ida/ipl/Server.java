@@ -279,11 +279,26 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				ArrayList<Board> boards = data.useCache() ? b.makeMoves(data.getCache()) : b.makeMoves();
 				if (boards.isEmpty())
 					return 0;
-				checkEnoughMoves(boards);
-				int solution = 0;
-				for (Board tmpBoard2 : boards)
-					solution += calculateBoardSolution(tmpBoard2);
-				return solution;
+
+				int boardsToAdd;
+				if (!boards.isEmpty() && (boardsToAdd = data.addMoreBoardsToQueue()) > 0) // If queue not full 'enough' fill it so the slaves have something to do as well.
+				{
+					Board tmpBoard = boards.remove(0); // Calculate only one board instead of all
+					data.addBoards(boards);
+					return calculateBoardSolution(tmpBoard);
+				}
+				else // Queue is full enough for the slaves to work so loop over all results to get the solutions.
+				{
+					int solution = 0;
+					for (Board tmpBoard2 : boards)
+						solution += calculateBoardSolution(tmpBoard2);
+					return solution;
+				}
+				//				checkEnoughMoves(boards);
+				//				int solution = 0;
+				//				for (Board tmpBoard2 : boards)
+				//					solution += calculateBoardSolution(tmpBoard2);
+				//				return solution;
 			}
 		}
 
