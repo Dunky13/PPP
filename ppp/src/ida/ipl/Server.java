@@ -133,7 +133,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			data.getSolutions().addAndGet(requestValue);
 
 		if (data.programFinished())
+		{
+			closeConnection(sender);
 			return;
+		}
 
 		Board replyValue = data.getBoard();
 		if (sendBoard(replyValue, sender))
@@ -143,7 +146,9 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private boolean sendBoard(Board board, IbisIdentifier destination)
 	{
 		boolean programFinished = data.programFinished();
-		SendPort port = data.getSenders().get(destination);
+		SendPort port = programFinished ? data.getSenders().remove(destination) : data.getSenders().get(destination);
+		if (port == null)
+			return false;
 		try
 		{
 			WriteMessage wm = port.newMessage();
@@ -203,32 +208,30 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private void shutdown() throws IOException
 	{
 		// Terminate the pool
-		System.out.println("Shutting down");
 		data.getParent().ibis.registry().terminate();
-		//		System.out.println("closing receiver");
-		// Close ports (and send termination messages)
-		//		for (SendPort sender : data.getSenders().values())
-		//		{
-		//			shutDownMessage(sender);
-		//			sender.close();
-		//		}
-		//		data.getReceiver().close();
-		System.out.println("Done");
+		for (IbisIdentifier sender : data.getSenders().keySet())
+		{
+			closeConnection(sender);
+		}
+		data.getReceiver().close();
 
 	}
 
-	private void shutDownMessage(SendPort port)
+	private void closeConnection(IbisIdentifier sender)
 	{
+		SendPort port = data.getSenders().remove(sender);
+		if (port == null)
+			return;
 		try
 		{
 			WriteMessage wm = port.newMessage();
 			wm.writeBoolean(true);
 			wm.finish();
+			port.close();
 		}
 		catch (IOException e)
 		{
 		}
-
 	}
 
 	private class ServerCalculator implements Runnable
