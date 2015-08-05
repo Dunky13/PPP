@@ -264,8 +264,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		/**
 		 * Looped to get boards from the queue
 		 * 
-		 * @throws IOException
-		 * 			@throws
+		 * @throws IOException @throws
 		 */
 		private void calculateQueueBoard(Board b)
 		{
@@ -315,6 +314,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			ArrayList<Board> tmpBoards = new ArrayList<Board>();
 			int boardSize = boards.size();
+			size = size > boardSize ? boardSize : size;
 			for (int i = 1; i <= size; i++)
 			{
 				tmpBoards.add(boards.remove(boardSize - i));
