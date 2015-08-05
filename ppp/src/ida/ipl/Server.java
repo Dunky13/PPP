@@ -237,6 +237,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			do
 			{
 				data.getNodesWaiting().incrementAndGet();
+				System.out.println("Server is looping, current number of solutions: " + data.getSolutions().get());
 				Board b = data.getBoard();
 				data.getNodesWaiting().decrementAndGet();
 
