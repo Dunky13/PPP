@@ -203,8 +203,9 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private void shutdown() throws IOException
 	{
 		// Terminate the pool
+		System.out.println("Shutting down");
 		data.getParent().ibis.registry().terminate();
-
+		System.out.println("closing receiver");
 		// Close ports (and send termination messages)
 		//		for (SendPort sender : data.getSenders().values())
 		//		{
@@ -212,6 +213,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		//			sender.close();
 		//		}
 		data.getReceiver().close();
+		System.out.println("Done");
 
 	}
 
@@ -259,7 +261,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		/**
 		 * Looped to get boards from the queue
 		 * 
-		 * @throws IOException @throws
+		 * @throws IOException
+		 * 			@throws
 		 */
 		private void calculateQueueBoard(Board b)
 		{
