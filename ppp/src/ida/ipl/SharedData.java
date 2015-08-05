@@ -12,6 +12,7 @@ import ibis.ipl.SendPort;
 class SharedData
 {
 	public static final Object lock = new Object();
+	public static final int numberOfBoardsPerSend = 4;
 	private final Ida parent;
 	private final ConcurrentHashMap<IbisIdentifier, SendPort> senders;
 	private ReceivePort receiver;
@@ -268,14 +269,14 @@ class SharedData
 
 	public void calculateMinimumQueueSize()
 	{
-		this.minimalQueueSize.set((this.senders.size() + 1) * 2);
+		this.minimalQueueSize.set((this.senders.size() + 1) * SharedData.numberOfBoardsPerSend);
 	}
 
 	public int addMoreBoardsToQueue()
 	{
 		if (deque.size() >= minimalQueueSize.get())
 			return 0;
-		return (minimalQueueSize.get() - deque.size()) * 2;
+		return (minimalQueueSize.get() - deque.size()) * SharedData.numberOfBoardsPerSend;
 	}
 
 	void statics()
