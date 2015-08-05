@@ -23,6 +23,7 @@ class SharedData
 	private BoardCache cache;
 
 	private volatile BoundStatus bStatus;
+	private volatile ProgramStatus pStatus;
 
 	public SharedData(Ida parent)
 	{
@@ -34,6 +35,7 @@ class SharedData
 		this.nodesWaiting = new AtomicInteger(0);
 		this.currentBound = new AtomicInteger(0);
 		this.bStatus = BoundStatus.TOCHANGE;
+		this.pStatus = ProgramStatus.RUNNING;
 	}
 
 	void getters()
@@ -102,6 +104,7 @@ class SharedData
 		boolean progFinished = this.solutions.get() > 0 && this.boundFinished();
 		if (progFinished)
 		{
+			this.pStatus = ProgramStatus.DONE;
 			SharedData.notifyAll(deque);
 			SharedData.notifyAll(lock);
 		}
@@ -153,7 +156,7 @@ class SharedData
 		Board b = null;
 		do
 		{
-			if (boundFinished())
+			if (this.bStatus == BoundStatus.TOCHANGE)
 				incrementBound();
 			b = getBoard(getLast);
 		} while (b == null && (deque.isEmpty() && !programFinished() && SharedData.wait(deque, 50)));
@@ -198,7 +201,7 @@ class SharedData
 	 */
 	public void incrementBound()
 	{
-		if (this.bStatus != BoundStatus.TOCHANGE)
+		if (this.pStatus == ProgramStatus.DONE)
 			return;
 		this.bStatus = BoundStatus.CHANGING;
 		synchronized (this.initialBoard)
@@ -297,5 +300,11 @@ class SharedData
 		CHANGING,
 		TOCHANGE,
 		CHANGED;
+	}
+
+	enum ProgramStatus
+	{
+		RUNNING,
+		DONE
 	}
 }
