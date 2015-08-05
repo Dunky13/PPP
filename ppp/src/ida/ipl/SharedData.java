@@ -96,7 +96,9 @@ class SharedData
 	public boolean programFinished()
 	{
 
-		boolean progFinished = this.pStatus == ProgramStatus.DONE || this.solutions.get() > 0 && this.boundFinished();
+		if (this.pStatus == ProgramStatus.DONE)
+			return true;
+		boolean progFinished = this.solutions.get() > 0 && this.boundFinished();
 		if (progFinished)
 		{
 			this.pStatus = ProgramStatus.DONE;
@@ -125,6 +127,10 @@ class SharedData
 	 */
 	public Board getBoard()
 	{
+		if (programFinished())
+			return null;
+		if (this.bStatus == BoundStatus.TOCHANGE)
+			incrementBound();
 		try
 		{
 			return queue.take();
