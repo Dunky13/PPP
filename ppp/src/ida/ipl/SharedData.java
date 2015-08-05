@@ -16,7 +16,7 @@ class SharedData
 	public static final Object lock = new Object();
 	private final Ida parent;
 	private final HashMap<IbisIdentifier, SendPort> senders;
-	private final HashMap<SendPort, WriteMessage> messages;
+	private HashMap<SendPort, WriteMessage> mmsgs;
 	private ReceivePort receiver;
 	private final LinkedBlockingQueue<Board> queue;
 	private final AtomicInteger solutions;
@@ -33,7 +33,7 @@ class SharedData
 	{
 		this.parent = parent;
 		this.senders = new HashMap<IbisIdentifier, SendPort>();
-		this.messages = new HashMap<SendPort, WriteMessage>();
+		this.mmsgs = new HashMap<SendPort, WriteMessage>();
 		this.queue = new LinkedBlockingQueue<Board>();
 		this.solutions = new AtomicInteger(0);
 		this.minimalQueueSize = new AtomicInteger(0);
@@ -321,12 +321,12 @@ class SharedData
 
 	public void setMessage(SendPort sendPort, WriteMessage wm)
 	{
-		if (!this.messages.containsKey(sendPort))
+		if (!this.mmsgs.containsKey(sendPort))
 		{
-			this.messages.put(sendPort, wm);
+			this.mmsgs.put(sendPort, wm);
 			return;
 		}
-		WriteMessage oldWM = this.messages.replace(sendPort, wm);
+		WriteMessage oldWM = this.mmsgs.replace(sendPort, wm);
 		try
 		{
 			oldWM.finish();
