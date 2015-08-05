@@ -145,6 +145,17 @@ class SharedData
 		return b;
 	}
 
+	public ArrayList<Board> getBoards(int amount, boolean getLast)
+	{
+		ArrayList<Board> boards = new ArrayList<Board>();
+
+		for (int i = 0; i < amount; i++)
+		{
+			boards.add(getBoard(getLast));
+		}
+		return boards;
+	}
+
 	//	/**
 	//	 * Returns board from queue, if queue is empty wait for queue to be filled
 	//	 * again.

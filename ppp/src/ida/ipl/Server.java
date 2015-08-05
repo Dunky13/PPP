@@ -135,12 +135,11 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		if (data.programFinished())
 			return;
 
-		Board replyValue = data.getBoard(false);
-		if (sendBoard(replyValue, sender))
+		if (sendBoard(data.getBoards(2, false), sender))
 			data.getNodesWaiting().decrementAndGet();
 	}
 
-	private boolean sendBoard(Board board, IbisIdentifier destination)
+	private boolean sendBoard(ArrayList<Board> boards, IbisIdentifier destination)
 	{
 		boolean programFinished = data.programFinished();
 		SendPort port = data.getSenders().get(destination);
@@ -150,7 +149,9 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			WriteMessage wm = port.newMessage(); //data.getNewMessage(port);
 			wm.writeBoolean(programFinished);
-			wm.writeObject(board);
+			wm.writeInt(boards.size());
+			for (Board b : boards)
+				wm.writeObject(b);
 			wm.finish();
 			return !programFinished;
 		}
