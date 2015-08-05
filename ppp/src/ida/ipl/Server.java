@@ -133,7 +133,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			data.getSolutions().addAndGet(requestValue);
 
 		if (data.programFinished())
+		{
+			shutDownMessage(sender);
 			return;
+		}
 
 		Board replyValue = data.getBoard();
 		if (sendBoard(replyValue, sender))
@@ -143,15 +146,15 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private boolean sendBoard(Board board, IbisIdentifier destination)
 	{
 		SendPort port = data.getSenders().get(destination);
-		if (data.programFinished())
-			return false;
+
 		try
 		{
+			boolean programFinished = data.programFinished();
 			WriteMessage wm = port.newMessage();
-			wm.writeBoolean(false);
+			wm.writeBoolean(programFinished);
 			wm.writeObject(board);
 			wm.finish();
-			return true;
+			return !programFinished;
 		}
 		catch (IOException e)
 		{
@@ -203,37 +206,37 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 */
 	private void shutdown() throws IOException
 	{
-		System.out.println("Shutting down");
-		// Terminate the pool
-		data.getParent().ibis.registry().terminate();
 
 		// Close ports (and send termination messages)
+		for (SendPort sender : data.getSenders().values())
+		{
+			shutDownMessage(sender);
+			sender.close();
+		}
+		data.getReceiver().close();
+
+		// Terminate the pool
+		data.getParent().ibis.registry().terminate();
+	}
+
+	private void shutDownMessage(IbisIdentifier sender)
+	{
+		data.getSenders().remove(sender);
+		shutDownMessage(data.getSenders().get(sender));
+	}
+
+	private void shutDownMessage(SendPort port)
+	{
 		try
 		{
-			System.out.println("Looping to close");
-			for (SendPort sender : data.getSenders().values())
-			{
-				System.out.println("Starting closing message");
-				WriteMessage wm = sender.newMessage();
-				System.out.println("Writing bool");
-				wm.writeBoolean(true);
-				System.out.println("Message prepared");
-				wm.finish();
-				System.out.println("Message sent");
-				sender.close();
-				System.out.println("Sender closed");
-			}
-			System.out.println("Done looping");
-			data.getReceiver().close();
-			System.out.println("Closed Receiver");
+			WriteMessage wm = port.newMessage();
+			wm.writeBoolean(true);
+			wm.finish();
 		}
-		catch (ConnectionClosedException e)
+		catch (IOException e)
 		{
-			System.out.println("Connection exception: " + e.getMessage());
-			// do nothing
 		}
 
-		System.out.println("Done");
 	}
 
 	private class ServerCalculator implements Runnable
@@ -266,8 +269,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		/**
 		 * Looped to get boards from the queue
 		 * 
-		 * @throws IOException
-		 * 			@throws
+		 * @throws IOException @throws
 		 */
 		private void calculateQueueBoard(Board b)
 		{
