@@ -22,6 +22,8 @@ class SharedData
 	private Board initialBoard;
 	private BoardCache cache;
 
+	private volatile BoundStatus bStatus;
+
 	public SharedData(Ida parent)
 	{
 		this.parent = parent;
@@ -31,6 +33,7 @@ class SharedData
 		this.minimalQueueSize = new AtomicInteger(0);
 		this.nodesWaiting = new AtomicInteger(0);
 		this.currentBound = new AtomicInteger(0);
+		this.bStatus = BoundStatus.TOCHANGE;
 	}
 
 	void getters()
@@ -108,9 +111,12 @@ class SharedData
 
 	private boolean boundFinished()
 	{
-		boolean bound = deque.isEmpty();
+		boolean bound = deque.isEmpty() && this.bStatus == BoundStatus.CHANGED;
 		if (!this.senders.isEmpty()) //If there are slaves connected
 			bound = bound && this.nodesWaiting.get() == (this.senders.size() + 1);
+
+		if (bound)
+			this.bStatus = BoundStatus.TOCHANGE;
 		return bound;
 	}
 
@@ -192,14 +198,16 @@ class SharedData
 	 */
 	public void incrementBound()
 	{
-		if (!boundFinished())
+		if (this.bStatus != BoundStatus.TOCHANGE)
 			return;
+		this.bStatus = BoundStatus.CHANGING;
 		synchronized (this.initialBoard)
 		{
 			int bound = this.currentBound.incrementAndGet();
 			this.initialBoard.setBound(bound);
 			System.out.print(" " + bound);
 			setInitialBoard(this.initialBoard);
+			this.bStatus = BoundStatus.CHANGED;
 		}
 
 	}
@@ -284,4 +292,15 @@ class SharedData
 		return true;
 	}
 
+	private enum BoundStatus
+
+	{
+		CHANGING(2),
+		TOCHANGE(1),
+		CHANGED(0);
+
+		BoundStatus(int numVal)
+		{
+		}
+	}
 }
