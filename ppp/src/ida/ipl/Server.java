@@ -175,6 +175,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		// Wait for ALL calclations to finish and to find a solution.
 		this.calculation.execute();
 		//		SharedData.wait(SharedData.lock);
+		System.out.println("Thread done execution");
 		shutdown();
 
 		System.out.print("\nresult is " + data.getSolutions().get() + " solutions of " + data.getInitialBoard().bound() + " steps");
@@ -253,8 +254,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		/**
 		 * Looped to get boards from the queue
 		 * 
-		 * @throws IOException
-		 * 			@throws
+		 * @throws IOException @throws
 		 */
 		private void calculateQueueBoard(Board b)
 		{
