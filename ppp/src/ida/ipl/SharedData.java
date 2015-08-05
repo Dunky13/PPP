@@ -212,11 +212,14 @@ class SharedData
 	 */
 	public void addBoards(ArrayList<Board> boards)
 	{
-		for (Board b : boards)
+		synchronized (deque)
 		{
-			deque.add(b);
+			for (Board b : boards)
+			{
+				deque.add(b);
+			}
+			SharedData.notifyAll(deque);
 		}
-		SharedData.notifyAll(deque);
 	}
 
 	void calculators()
