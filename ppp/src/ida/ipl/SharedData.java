@@ -3,6 +3,7 @@ package ida.ipl;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import ibis.ipl.IbisIdentifier;
 import ibis.ipl.ReceivePort;
@@ -131,14 +132,20 @@ class SharedData
 			return null;
 		if (boundFinished() && this.bStatus == BoundStatus.TOCHANGE)
 			incrementBound();
-		try
+
+		Board b = null;
+		do
 		{
-			return queue.take();
-		}
-		catch (InterruptedException e)
-		{
-		}
-		return null;
+			try
+			{
+				b = queue.poll(50, TimeUnit.MILLISECONDS);
+			}
+			catch (InterruptedException e)
+			{
+			}
+		} while (b == null && !programFinished());
+
+		return b;
 	}
 
 	//	/**
