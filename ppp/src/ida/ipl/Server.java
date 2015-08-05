@@ -151,8 +151,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			return false;
 		try
 		{
-			WriteMessage wm = port.newMessage();
-			data.setMessage(port, wm);
+			WriteMessage wm = data.getNewMessage(port);
 			wm.writeBoolean(programFinished);
 			wm.writeObject(board);
 			wm.finish();
@@ -228,8 +227,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			return;
 		try
 		{
-			WriteMessage wm = port.newMessage();
-			data.setMessage(port, wm);
+			WriteMessage wm = data.getNewMessage(port);
 			wm.writeBoolean(true);
 			wm.finish();
 			port.close();
@@ -269,7 +267,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		/**
 		 * Looped to get boards from the queue
 		 * 
-		 * @throws IOException @throws
+		 * @throws IOException
+		 * 			@throws
 		 */
 		private void calculateQueueBoard(Board b)
 		{

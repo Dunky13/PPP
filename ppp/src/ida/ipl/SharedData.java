@@ -16,7 +16,7 @@ class SharedData
 	public static final Object lock = new Object();
 	private final Ida parent;
 	private final HashMap<IbisIdentifier, SendPort> senders;
-	private HashMap<SendPort, WriteMessage> mmsgs;
+	private HashMap<SendPort, WriteMessage> messages;
 	private ReceivePort receiver;
 	private final LinkedBlockingQueue<Board> queue;
 	private final AtomicInteger solutions;
@@ -33,7 +33,7 @@ class SharedData
 	{
 		this.parent = parent;
 		this.senders = new HashMap<IbisIdentifier, SendPort>();
-		this.mmsgs = new HashMap<SendPort, WriteMessage>();
+		this.messages = new HashMap<SendPort, WriteMessage>();
 		this.queue = new LinkedBlockingQueue<Board>();
 		this.solutions = new AtomicInteger(0);
 		this.minimalQueueSize = new AtomicInteger(0);
@@ -319,21 +319,15 @@ class SharedData
 		return true;
 	}
 
-	public void setMessage(SendPort sendPort, WriteMessage wm)
+	public WriteMessage getNewMessage(SendPort sendPort) throws IOException
 	{
-		if (!this.mmsgs.containsKey(sendPort))
-		{
-			this.mmsgs.put(sendPort, wm);
-			return;
-		}
-		WriteMessage oldWM = this.mmsgs.put(sendPort, wm);
-		try
-		{
+		WriteMessage oldWM = this.messages.get(sendPort);
+		if (oldWM != null)
 			oldWM.finish();
-		}
-		catch (IOException e)
-		{
-		}
+
+		WriteMessage wm = sendPort.newMessage();
+		this.messages.put(sendPort, wm);
+		return wm;
 	}
 
 	enum BoundStatus
