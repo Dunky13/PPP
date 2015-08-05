@@ -133,10 +133,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			data.getSolutions().addAndGet(requestValue);
 
 		if (data.programFinished())
-		{
-			shutDownMessage(sender);
 			return;
-		}
 
 		Board replyValue = data.getBoard();
 		if (sendBoard(replyValue, sender))
@@ -218,12 +215,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 	}
 
-	private void shutDownMessage(IbisIdentifier sender)
-	{
-		data.getSenders().remove(sender);
-		shutDownMessage(data.getSenders().get(sender));
-	}
-
 	private void shutDownMessage(SendPort port)
 	{
 		try
@@ -268,8 +259,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		/**
 		 * Looped to get boards from the queue
 		 * 
-		 * @throws IOException
-		 * 			@throws
+		 * @throws IOException @throws
 		 */
 		private void calculateQueueBoard(Board b)
 		{
