@@ -3,7 +3,6 @@ package ida.ipl;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Properties;
-import ibis.ipl.ConnectionClosedException;
 import ibis.ipl.IbisIdentifier;
 import ibis.ipl.MessageUpcall;
 import ibis.ipl.ReadMessage;
@@ -102,24 +101,9 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	@Override
 	public void lostConnection(ReceivePort rp, SendPortIdentifier spi, Throwable thrwbl)
 	{
-		try
-		{
-			IbisIdentifier worker = spi.ibisIdentifier();
-			SendPort sender = data.getSenders().get(worker);
-			if (sender == null)
-				return;
-			sender.close();
-			data.getSenders().remove(worker);
-			data.getNodesWaiting().decrementAndGet();
-		}
-		catch (ConnectionClosedException e)
-		{
-			// do nothing
-		}
-		catch (IOException e)
-		{
-			e.printStackTrace(System.err);
-		}
+		IbisIdentifier worker = spi.ibisIdentifier();
+		closeConnection(worker);
+		data.getNodesWaiting().decrementAndGet();
 	}
 
 	@Override
@@ -212,12 +196,12 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		// Terminate the pool
 		data.getParent().ibis.registry().terminate();
 
-		System.out.println("Closing Senders");
+		//		System.out.println("Closing Senders");
 		for (IbisIdentifier sender : data.getSenders().keySet())
 		{
 			closeConnection(sender);
 		}
-		System.out.println("Closing receiver");
+		//		System.out.println("Closing receiver");
 		data.getReceiver().close(-1);
 
 	}
@@ -269,7 +253,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		/**
 		 * Looped to get boards from the queue
 		 * 
-		 * @throws IOException @throws
+		 * @throws IOException
+		 * 			@throws
 		 */
 		private void calculateQueueBoard(Board b)
 		{
