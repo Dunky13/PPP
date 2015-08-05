@@ -1,5 +1,6 @@
 package ida.ipl;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -8,12 +9,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import ibis.ipl.IbisIdentifier;
 import ibis.ipl.ReceivePort;
 import ibis.ipl.SendPort;
+import ibis.ipl.WriteMessage;
 
 class SharedData
 {
 	public static final Object lock = new Object();
 	private final Ida parent;
 	private final HashMap<IbisIdentifier, SendPort> senders;
+	private final HashMap<SendPort, WriteMessage> messages;
 	private ReceivePort receiver;
 	private final LinkedBlockingQueue<Board> queue;
 	private final AtomicInteger solutions;
@@ -30,6 +33,7 @@ class SharedData
 	{
 		this.parent = parent;
 		this.senders = new HashMap<IbisIdentifier, SendPort>();
+		this.messages = new HashMap<SendPort, WriteMessage>();
 		this.queue = new LinkedBlockingQueue<Board>();
 		this.solutions = new AtomicInteger(0);
 		this.minimalQueueSize = new AtomicInteger(0);
@@ -313,6 +317,23 @@ class SharedData
 			o.notifyAll();
 		}
 		return true;
+	}
+
+	public void setMessage(SendPort sendPort, WriteMessage wm)
+	{
+		if (!this.messages.containsKey(sendPort))
+		{
+			this.messages.put(sendPort, wm);
+			return;
+		}
+		WriteMessage oldWM = this.messages.replace(sendPort, wm);
+		try
+		{
+			oldWM.finish();
+		}
+		catch (IOException e)
+		{
+		}
 	}
 
 	enum BoundStatus
