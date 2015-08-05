@@ -135,7 +135,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		if (data.programFinished())
 			return;
 
-		Board replyValue = data.getBoard();
+		Board replyValue = data.getBoard(false);
 		if (sendBoard(replyValue, sender))
 			data.getNodesWaiting().decrementAndGet();
 	}
@@ -244,7 +244,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			do
 			{
 				data.getNodesWaiting().incrementAndGet();
-				Board b = data.getBoard();
+				Board b = data.getBoard(true);
 				data.getNodesWaiting().decrementAndGet();
 
 				calculateQueueBoard(b);
@@ -255,8 +255,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		/**
 		 * Looped to get boards from the queue
 		 * 
-		 * @throws IOException
-		 * 			@throws
+		 * @throws IOException @throws
 		 */
 		private void calculateQueueBoard(Board b)
 		{

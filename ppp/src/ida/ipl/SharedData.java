@@ -2,7 +2,7 @@ package ida.ipl;
 
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import ibis.ipl.IbisIdentifier;
@@ -15,7 +15,7 @@ class SharedData
 	private final Ida parent;
 	private final ConcurrentHashMap<IbisIdentifier, SendPort> senders;
 	private ReceivePort receiver;
-	private final LinkedBlockingQueue<Board> queue;
+	private final LinkedBlockingDeque<Board> deque;
 	private final AtomicInteger solutions;
 	private final AtomicInteger minimalQueueSize;
 	private final AtomicInteger nodesWaiting;
@@ -30,7 +30,7 @@ class SharedData
 	{
 		this.parent = parent;
 		this.senders = new ConcurrentHashMap<IbisIdentifier, SendPort>();
-		this.queue = new LinkedBlockingQueue<Board>();
+		this.deque = new LinkedBlockingDeque<Board>();
 		this.solutions = new AtomicInteger(0);
 		this.minimalQueueSize = new AtomicInteger(0);
 		this.nodesWaiting = new AtomicInteger(0);
@@ -100,7 +100,7 @@ class SharedData
 		boolean progFinished = this.pStatus == ProgramStatus.DONE || this.solutions.get() > 0 && this.boundFinished();
 		if (progFinished)
 		{
-			SharedData.notifyAll(queue);
+			SharedData.notifyAll(deque);
 			SharedData.notifyAll(lock);
 			this.pStatus = ProgramStatus.DONE;
 		}
@@ -110,7 +110,7 @@ class SharedData
 
 	private boolean boundFinished()
 	{
-		boolean bound = queue.isEmpty() && this.bStatus != BoundStatus.CHANGING;
+		boolean bound = deque.isEmpty() && this.bStatus != BoundStatus.CHANGING;
 		if (!this.senders.isEmpty()) //If there are slaves connected
 			bound = bound && this.nodesWaiting.get() == (this.senders.size() + 1);
 
@@ -124,19 +124,18 @@ class SharedData
 	 * 
 	 * @return Board
 	 */
-	public Board getBoard()
+	public Board getBoard(boolean getLast)
 	{
 		if (programFinished())
 			return null;
 		if (boundFinished() && this.bStatus == BoundStatus.TOCHANGE)
 			incrementBound();
-
 		Board b = null;
 		do
 		{
 			try
 			{
-				b = queue.poll(50, TimeUnit.MILLISECONDS);
+				b = getLast ? deque.pollLast(50, TimeUnit.MILLISECONDS) : deque.pollFirst(50, TimeUnit.MILLISECONDS);
 			}
 			catch (InterruptedException e)
 			{
@@ -188,7 +187,7 @@ class SharedData
 	{
 		this.initialBoard = initialBoard;
 
-		queue.clear();
+		deque.clear();
 
 		ArrayList<Board> boards = this.useCache() ? initialBoard.makeMoves(getCache()) : initialBoard.makeMoves();
 
@@ -224,7 +223,7 @@ class SharedData
 	{
 		try
 		{
-			queue.put(b);
+			deque.put(b);
 			return true;
 		}
 		catch (InterruptedException e)
@@ -247,7 +246,7 @@ class SharedData
 			{
 			}
 		}
-		SharedData.notifyAll(queue);
+		SharedData.notifyAll(deque);
 
 	}
 
@@ -263,9 +262,9 @@ class SharedData
 
 	public int addMoreBoardsToQueue()
 	{
-		if (queue.size() >= minimalQueueSize.get())
+		if (deque.size() >= minimalQueueSize.get())
 			return 0;
-		return (minimalQueueSize.get() - queue.size()) * 2;
+		return (minimalQueueSize.get() - deque.size()) * 2;
 	}
 
 	void statics()
