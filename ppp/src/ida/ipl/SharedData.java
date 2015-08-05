@@ -111,7 +111,7 @@ class SharedData
 
 	private boolean boundFinished()
 	{
-		boolean bound = deque.isEmpty() && this.bStatus == BoundStatus.CHANGED;
+		boolean bound = deque.isEmpty() && this.bStatus != BoundStatus.CHANGING;
 		if (!this.senders.isEmpty()) //If there are slaves connected
 			bound = bound && this.nodesWaiting.get() == (this.senders.size() + 1);
 
@@ -292,15 +292,10 @@ class SharedData
 		return true;
 	}
 
-	private enum BoundStatus
-
+	enum BoundStatus
 	{
-		CHANGING(2),
-		TOCHANGE(1),
-		CHANGED(0);
-
-		BoundStatus(int numVal)
-		{
-		}
+		CHANGING,
+		TOCHANGE,
+		CHANGED;
 	}
 }
