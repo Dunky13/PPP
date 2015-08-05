@@ -2,7 +2,7 @@ package ida.ipl;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import ibis.ipl.IbisIdentifier;
 import ibis.ipl.ReceivePort;
@@ -14,7 +14,7 @@ class SharedData
 	private final Ida parent;
 	private final HashMap<IbisIdentifier, SendPort> senders;
 	private ReceivePort receiver;
-	private final ConcurrentLinkedDeque<Board> deque;
+	private final LinkedBlockingQueue<Board> queue;
 	private final AtomicInteger solutions;
 	private final AtomicInteger minimalQueueSize;
 	private final AtomicInteger nodesWaiting;
@@ -29,7 +29,7 @@ class SharedData
 	{
 		this.parent = parent;
 		this.senders = new HashMap<IbisIdentifier, SendPort>();
-		this.deque = new ConcurrentLinkedDeque<Board>();
+		this.queue = new LinkedBlockingQueue<Board>();
 		this.solutions = new AtomicInteger(0);
 		this.minimalQueueSize = new AtomicInteger(0);
 		this.nodesWaiting = new AtomicInteger(0);
@@ -56,11 +56,6 @@ class SharedData
 	public ReceivePort getReceiver()
 	{
 		return receiver;
-	}
-
-	public ConcurrentLinkedDeque<Board> getDeque()
-	{
-		return deque;
 	}
 
 	public AtomicInteger getSolutions()
@@ -105,7 +100,7 @@ class SharedData
 		if (progFinished)
 		{
 			this.pStatus = ProgramStatus.DONE;
-			SharedData.notifyAll(deque);
+			SharedData.notifyAll(queue);
 			SharedData.notifyAll(lock);
 		}
 
@@ -114,7 +109,7 @@ class SharedData
 
 	private boolean boundFinished()
 	{
-		boolean bound = deque.isEmpty() && this.bStatus != BoundStatus.CHANGING;
+		boolean bound = queue.isEmpty() && this.bStatus != BoundStatus.CHANGING;
 		if (!this.senders.isEmpty()) //If there are slaves connected
 			bound = bound && this.nodesWaiting.get() == (this.senders.size() + 1);
 
@@ -128,45 +123,45 @@ class SharedData
 	 * 
 	 * @return Board
 	 */
-	public Board getBoard(boolean getLast)
+	public Board getBoard()
 	{
-		synchronized (deque)
+		try
 		{
-			if (deque.isEmpty())
-				return null;
-			if (getLast)
-				return deque.removeLast();
-			return deque.pop();
+			return queue.take();
 		}
-	}
-
-	/**
-	 * Returns board from queue, if queue is empty wait for queue to be filled
-	 * again.
-	 * 
-	 * Blocking property
-	 * 
-	 * @return Board
-	 * @throws InterruptedException
-	 */
-	public Board getBoardAfterWait(boolean getLast)
-	{
-		if (programFinished())
-			return null;
-		Board b = null;
-		do
+		catch (InterruptedException e)
 		{
-			if (this.bStatus == BoundStatus.TOCHANGE)
-				incrementBound();
-			b = getBoard(getLast);
-		} while (b == null && (deque.isEmpty() && !programFinished() && SharedData.wait(deque, 50)));
-		/*
-		 * If b is not null can return immedeatly
-		 * Else the solution is not yet found AND the queue is empty - then wait (wait always return true, is notified when something is added to the queue)
-		 */
-
-		return b;
+		}
+		return null;
 	}
+
+	//	/**
+	//	 * Returns board from queue, if queue is empty wait for queue to be filled
+	//	 * again.
+	//	 * 
+	//	 * Blocking property
+	//	 * 
+	//	 * @return Board
+	//	 * @throws InterruptedException
+	//	 */
+	//	public Board getBoardAfterWait(boolean getLast)
+	//	{
+	//		if (programFinished())
+	//			return null;
+	//		Board b = null;
+	//		do
+	//		{
+	//			if (this.bStatus == BoundStatus.TOCHANGE)
+	//				incrementBound();
+	//			b = getBoard(getLast);
+	//		} while (b == null && (deque.isEmpty() && !programFinished() && SharedData.wait(deque, 50)));
+	//		/*
+	//		 * If b is not null can return immedeatly
+	//		 * Else the solution is not yet found AND the queue is empty - then wait (wait always return true, is notified when something is added to the queue)
+	//		 */
+	//
+	//		return b;
+	//	}
 
 	void setters()
 	{
@@ -182,8 +177,7 @@ class SharedData
 	{
 		this.initialBoard = initialBoard;
 
-		while (!deque.isEmpty())
-			deque.remove();
+		queue.clear();
 
 		ArrayList<Board> boards = this.useCache() ? initialBoard.makeMoves(getCache()) : initialBoard.makeMoves();
 
@@ -215,6 +209,19 @@ class SharedData
 
 	}
 
+	private boolean putBoard(Board b)
+	{
+		try
+		{
+			queue.put(b);
+			return true;
+		}
+		catch (InterruptedException e)
+		{
+			return false;
+		}
+	}
+
 	/**
 	 * Add boards to the queue and notify the waiting threads to start picking
 	 * up work.
@@ -223,14 +230,14 @@ class SharedData
 	 */
 	public void addBoards(ArrayList<Board> boards)
 	{
-		synchronized (deque)
+		for (Board b : boards)
 		{
-			for (Board b : boards)
+			while (!putBoard(b))
 			{
-				deque.add(b);
 			}
-			SharedData.notifyAll(deque);
 		}
+		SharedData.notifyAll(queue);
+
 	}
 
 	void calculators()
@@ -245,9 +252,9 @@ class SharedData
 
 	public int addMoreBoardsToQueue()
 	{
-		if (deque.size() >= minimalQueueSize.get())
+		if (queue.size() >= minimalQueueSize.get())
 			return 0;
-		return (minimalQueueSize.get() - deque.size()) * 2;
+		return (minimalQueueSize.get() - queue.size()) * 2;
 	}
 
 	void statics()
