@@ -145,11 +145,10 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 	private boolean sendBoard(Board board, IbisIdentifier destination)
 	{
+		boolean programFinished = data.programFinished();
 		SendPort port = data.getSenders().get(destination);
-
 		try
 		{
-			boolean programFinished = data.programFinished();
 			WriteMessage wm = port.newMessage();
 			wm.writeBoolean(programFinished);
 			wm.writeObject(board);
@@ -206,17 +205,17 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 */
 	private void shutdown() throws IOException
 	{
-
-		// Close ports (and send termination messages)
-		for (SendPort sender : data.getSenders().values())
-		{
-			shutDownMessage(sender);
-			sender.close();
-		}
-		data.getReceiver().close();
-
 		// Terminate the pool
 		data.getParent().ibis.registry().terminate();
+
+		// Close ports (and send termination messages)
+		//		for (SendPort sender : data.getSenders().values())
+		//		{
+		//			shutDownMessage(sender);
+		//			sender.close();
+		//		}
+		data.getReceiver().close();
+
 	}
 
 	private void shutDownMessage(IbisIdentifier sender)
