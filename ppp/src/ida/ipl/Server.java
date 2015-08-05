@@ -170,11 +170,11 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		// Run the solving on server side in a seperate thread so it does not
 		// block upcalls or the lock that waits until ALL calculations are
 		// finished.
-		Thread t = new Thread(this.calculation);
-		t.start();
-
+		//		Thread t = new Thread(this.calculation);
+		//		t.start();
 		// Wait for ALL calclations to finish and to find a solution.
-		SharedData.wait(SharedData.lock);
+		this.calculation.execute();
+		//		SharedData.wait(SharedData.lock);
 		shutdown();
 
 		System.out.print("\nresult is " + data.getSolutions().get() + " solutions of " + data.getInitialBoard().bound() + " steps");
@@ -234,6 +234,11 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 		public void run()
 		{
+			execute();
+		}
+
+		public void execute()
+		{
 			do
 			{
 				data.getNodesWaiting().incrementAndGet();
@@ -243,13 +248,13 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				calculateQueueBoard(b);
 
 			} while (!data.programFinished());
-			System.out.println("Server Thread is done");
 		}
 
 		/**
 		 * Looped to get boards from the queue
 		 * 
-		 * @throws IOException @throws
+		 * @throws IOException
+		 * 			@throws
 		 */
 		private void calculateQueueBoard(Board b)
 		{

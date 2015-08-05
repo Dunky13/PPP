@@ -97,14 +97,12 @@ class SharedData
 	public boolean programFinished()
 	{
 
-		if (this.pStatus == ProgramStatus.DONE)
-			return true;
-		boolean progFinished = this.solutions.get() > 0 && this.boundFinished();
+		boolean progFinished = this.pStatus == ProgramStatus.DONE || this.solutions.get() > 0 && this.boundFinished();
 		if (progFinished)
 		{
-			this.pStatus = ProgramStatus.DONE;
 			SharedData.notifyAll(queue);
 			SharedData.notifyAll(lock);
+			this.pStatus = ProgramStatus.DONE;
 		}
 
 		return progFinished;
