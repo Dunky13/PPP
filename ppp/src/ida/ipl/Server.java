@@ -216,7 +216,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			closeConnection(sender);
 		}
 		System.out.println("Closing receiver");
-		data.getReceiver().close();
+		data.getReceiver().close(-1);
 
 	}
 
