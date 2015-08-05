@@ -106,6 +106,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			IbisIdentifier worker = spi.ibisIdentifier();
 			SendPort sender = data.getSenders().get(worker);
+			if (sender == null)
+				return;
 			sender.close();
 			data.getSenders().remove(worker);
 			data.getNodesWaiting().decrementAndGet();
@@ -267,8 +269,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		/**
 		 * Looped to get boards from the queue
 		 * 
-		 * @throws IOException
-		 * 			@throws
+		 * @throws IOException @throws
 		 */
 		private void calculateQueueBoard(Board b)
 		{
