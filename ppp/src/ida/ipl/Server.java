@@ -215,6 +215,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			{
 				System.out.println("Starting closing message");
 				WriteMessage wm = sender.newMessage();
+				System.out.println("Writing bool");
 				wm.writeBoolean(true);
 				System.out.println("Message prepared");
 				wm.finish();
@@ -265,7 +266,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		/**
 		 * Looped to get boards from the queue
 		 * 
-		 * @throws IOException @throws
+		 * @throws IOException
+		 * 			@throws
 		 */
 		private void calculateQueueBoard(Board b)
 		{
