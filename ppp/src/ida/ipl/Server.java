@@ -175,7 +175,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 		// Wait for ALL calclations to finish and to find a solution.
 		SharedData.wait(SharedData.lock);
-
 		shutdown();
 
 		System.out.print("\nresult is " + data.getSolutions().get() + " solutions of " + data.getInitialBoard().bound() + " steps");
@@ -277,20 +276,33 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			else
 			{
 				ArrayList<Board> boards = data.useCache() ? b.makeMoves(data.getCache()) : b.makeMoves();
-				if (!boards.isEmpty() && data.addMoreBoardsToQueue()) // If queue not full 'enough' fill it so the slaves have something to do as well.
-				{
-					Board tmpBoard = boards.remove(0); // Calculate only one board instead of all
-					data.addBoards(boards);
-					return calculateBoardSolution(tmpBoard);
-				}
-				else // Queue is full enough for the slaves to work so loop over all results to get the solutions.
-				{
-					int solution = 0;
-					for (Board tmpBoard2 : boards)
-						solution += calculateBoardSolution(tmpBoard2);
-					return solution;
-				}
+				if (boards.isEmpty())
+					return 0;
+				checkEnoughMoves(boards);
+				int solution = 0;
+				for (Board tmpBoard2 : boards)
+					solution += calculateBoardSolution(tmpBoard2);
+				return solution;
 			}
+		}
+
+		private void checkEnoughMoves(ArrayList<Board> boards)
+		{
+			int boardsToAdd = 0;
+			if ((boardsToAdd = data.addMoreBoardsToQueue()) > 0) // If queue not full 'enough' fill it so the slaves have something to do as well.
+				data.addBoards(splitMoves(boards, boardsToAdd));
+			//Get the necessary boards to fill the queue
+		}
+
+		private ArrayList<Board> splitMoves(ArrayList<Board> boards, int size)
+		{
+			ArrayList<Board> tmpBoards = new ArrayList<Board>();
+			int boardSize = boards.size();
+			for (int i = 1; i <= size; i++)
+			{
+				tmpBoards.add(boards.remove(boardSize - i));
+			}
+			return tmpBoards;
 		}
 	}
 }

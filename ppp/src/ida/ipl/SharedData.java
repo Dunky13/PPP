@@ -101,7 +101,7 @@ class SharedData
 	public boolean programFinished()
 	{
 
-		boolean progFinished = this.solutions.get() > 0 && this.boundFinished();
+		boolean progFinished = this.pStatus == ProgramStatus.DONE || this.solutions.get() > 0 && this.boundFinished();
 		if (progFinished)
 		{
 			this.pStatus = ProgramStatus.DONE;
@@ -243,9 +243,11 @@ class SharedData
 		this.minimalQueueSize.set((this.senders.size() + 1) * 2);
 	}
 
-	public boolean addMoreBoardsToQueue()
+	public int addMoreBoardsToQueue()
 	{
-		return deque.size() < minimalQueueSize.get();
+		if (deque.size() >= minimalQueueSize.get())
+			return 0;
+		return (minimalQueueSize.get() - deque.size()) * 2;
 	}
 
 	void statics()
