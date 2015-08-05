@@ -209,10 +209,13 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 		// Terminate the pool
 		data.getParent().ibis.registry().terminate();
+
+		System.out.println("Closing Senders");
 		for (IbisIdentifier sender : data.getSenders().keySet())
 		{
 			closeConnection(sender);
 		}
+		System.out.println("Closing receiver");
 		data.getReceiver().close();
 
 	}
@@ -264,7 +267,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		/**
 		 * Looped to get boards from the queue
 		 * 
-		 * @throws IOException @throws
+		 * @throws IOException
+		 * 			@throws
 		 */
 		private void calculateQueueBoard(Board b)
 		{
