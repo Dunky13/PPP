@@ -175,7 +175,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		// Wait for ALL calclations to finish and to find a solution.
 		this.calculation.execute();
 		//		SharedData.wait(SharedData.lock);
-		System.out.println("Thread done execution");
+
 		shutdown();
 
 		System.out.print("\nresult is " + data.getSolutions().get() + " solutions of " + data.getInitialBoard().bound() + " steps");
@@ -203,25 +203,34 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 */
 	private void shutdown() throws IOException
 	{
+		System.out.println("Shutting down");
 		// Terminate the pool
 		data.getParent().ibis.registry().terminate();
 
 		// Close ports (and send termination messages)
 		try
 		{
+			System.out.println("Looping to close");
 			for (SendPort sender : data.getSenders().values())
 			{
+				System.out.println("Starting closing message");
 				WriteMessage wm = sender.newMessage();
 				wm.writeBoolean(true);
 				wm.finish();
 				sender.close();
+				System.out.println("Sent close message");
 			}
+			System.out.println("Done looping");
 			data.getReceiver().close();
+			System.out.println("Closed Receiver");
 		}
 		catch (ConnectionClosedException e)
 		{
+			System.out.println("Connection exception: " + e.getMessage());
 			// do nothing
 		}
+
+		System.out.println("Done");
 	}
 
 	private class ServerCalculator implements Runnable
@@ -254,7 +263,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		/**
 		 * Looped to get boards from the queue
 		 * 
-		 * @throws IOException @throws
+		 * @throws IOException
+		 * 			@throws
 		 */
 		private void calculateQueueBoard(Board b)
 		{
