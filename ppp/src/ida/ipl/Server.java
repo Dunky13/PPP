@@ -143,7 +143,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private boolean sendBoard(Board board, IbisIdentifier destination)
 	{
 		boolean programFinished = data.programFinished();
-		SendPort port = programFinished ? data.getSenders().remove(destination) : data.getSenders().get(destination);
+		SendPort port = data.getSenders().get(destination);
 		if (port == null)
 			return false;
 		try
@@ -255,7 +255,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		/**
 		 * Looped to get boards from the queue
 		 * 
-		 * @throws IOException @throws
+		 * @throws IOException
+		 * 			@throws
 		 */
 		private void calculateQueueBoard(Board b)
 		{
