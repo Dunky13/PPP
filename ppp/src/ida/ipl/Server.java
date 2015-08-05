@@ -145,6 +145,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 		catch (IOException e)
 		{
+			e.printStackTrace();
 			return false;
 		}
 	}
@@ -253,8 +254,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		/**
 		 * Looped to get boards from the queue
 		 * 
-		 * @throws IOException
-		 * 			@throws
+		 * @throws IOException @throws
 		 */
 		private void calculateQueueBoard(Board b)
 		{
