@@ -1,10 +1,15 @@
 package ida.ipl;
 
+import java.io.Serializable;
 import ida.ipl.Board.Position;
 
-public class Car
+public class Car implements Serializable
 {
 
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 6844512676383749795L;
 	public Position start = null;
 	public Position end = null;
 
