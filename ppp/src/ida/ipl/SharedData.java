@@ -2,7 +2,6 @@ package ida.ipl;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -16,7 +15,7 @@ class SharedData
 {
 	public static final Object lock = new Object();
 	private final Ida parent;
-	private final HashMap<IbisIdentifier, SendPort> senders;
+	private final ConcurrentHashMap<IbisIdentifier, SendPort> senders;
 	private ConcurrentHashMap<SendPort, WriteMessage> messages;
 	private ReceivePort receiver;
 	private final LinkedBlockingQueue<Board> queue;
@@ -33,7 +32,7 @@ class SharedData
 	public SharedData(Ida parent)
 	{
 		this.parent = parent;
-		this.senders = new HashMap<IbisIdentifier, SendPort>();
+		this.senders = new ConcurrentHashMap<IbisIdentifier, SendPort>();
 		this.messages = new ConcurrentHashMap<SendPort, WriteMessage>();
 		this.queue = new LinkedBlockingQueue<Board>();
 		this.solutions = new AtomicInteger(0);
@@ -54,7 +53,7 @@ class SharedData
 		return parent;
 	}
 
-	public HashMap<IbisIdentifier, SendPort> getSenders()
+	public ConcurrentHashMap<IbisIdentifier, SendPort> getSenders()
 	{
 		return senders;
 	}
