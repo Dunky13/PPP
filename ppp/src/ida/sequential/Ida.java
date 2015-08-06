@@ -5,41 +5,58 @@ import java.util.ArrayList;
 public class Ida
 {
 
-	private static void solve(Board board, boolean useCache)
+	public static void main(String[] args)
 	{
-		BoardCache cache = null;
-		if (useCache)
+		String fileName = null;
+		boolean cache = true;
+
+		for (int i = 0; i < args.length; i++)
 		{
-			cache = new BoardCache();
-		}
-
-		int bound = board.distance();
-		int solutions = 0;
-
-		System.out.print("Try bound ");
-		System.out.flush();
-
-		do
-		{
-			board.setBound(bound);
-
-			System.out.print(bound + " ");
-			System.out.flush();
-
-			if (useCache)
+			if (args[i].equals("--file"))
 			{
-				solutions = solutions(board, cache);
+				fileName = args[++i];
+			}
+			else if (args[i].equals("--nocache"))
+			{
+				cache = false;
 			}
 			else
 			{
-				solutions = solutions(board);
+				System.err.println("No such option: " + args[i]);
+				System.exit(1);
 			}
+		}
 
-			bound++;
-		} while (solutions == 0);
+		Board initialBoard = null;
 
-		System.out.print("\nresult is " + solutions + " solutions of " + board.bound() + " steps");
-		System.out.flush();
+		if (fileName == null)
+		{
+			System.err.println("No input file provided.");
+			System.exit(1);
+		}
+		else
+		{
+			try
+			{
+				initialBoard = new Board(fileName);
+			}
+			catch (Exception e)
+			{
+				System.err.println("could not initialize board from file: " + e);
+				System.exit(1);
+			}
+		}
+		System.out.println("Running IDA*, initial board:");
+		System.out.println(initialBoard);
+
+		long start = System.currentTimeMillis();
+		solve(initialBoard, cache);
+		long end = System.currentTimeMillis();
+
+		// NOTE: this is printed to standard error! The rest of the output is
+		// constant for each set of parameters. Printing this to standard error
+		// makes the output of standard out comparable with "diff"
+		System.err.println("ida took " + (end - start) + " milliseconds");
 	}
 
 	/**
@@ -105,57 +122,40 @@ public class Ida
 		return result;
 	}
 
-	public static void main(String[] args)
+	private static void solve(Board board, boolean useCache)
 	{
-		String fileName = null;
-		boolean cache = true;
-
-		for (int i = 0; i < args.length; i++)
+		BoardCache cache = null;
+		if (useCache)
 		{
-			if (args[i].equals("--file"))
+			cache = new BoardCache();
+		}
+
+		int bound = board.distance();
+		int solutions = 0;
+
+		System.out.print("Try bound ");
+		System.out.flush();
+
+		do
+		{
+			board.setBound(bound);
+
+			System.out.print(bound + " ");
+			System.out.flush();
+
+			if (useCache)
 			{
-				fileName = args[++i];
-			}
-			else if (args[i].equals("--nocache"))
-			{
-				cache = false;
+				solutions = solutions(board, cache);
 			}
 			else
 			{
-				System.err.println("No such option: " + args[i]);
-				System.exit(1);
+				solutions = solutions(board);
 			}
-		}
 
-		Board initialBoard = null;
+			bound++;
+		} while (solutions == 0);
 
-		if (fileName == null)
-		{
-			System.err.println("No input file provided.");
-			System.exit(1);
-		}
-		else
-		{
-			try
-			{
-				initialBoard = new Board(fileName);
-			}
-			catch (Exception e)
-			{
-				System.err.println("could not initialize board from file: " + e);
-				System.exit(1);
-			}
-		}
-		System.out.println("Running IDA*, initial board:");
-		System.out.println(initialBoard);
-
-		long start = System.currentTimeMillis();
-		solve(initialBoard, cache);
-		long end = System.currentTimeMillis();
-
-		// NOTE: this is printed to standard error! The rest of the output is
-		// constant for each set of parameters. Printing this to standard error
-		// makes the output of standard out comparable with "diff"
-		System.err.println("ida took " + (end - start) + " milliseconds");
+		System.out.print("\nresult is " + solutions + " solutions of " + board.bound() + " steps");
+		System.out.flush();
 	}
 }

@@ -5,8 +5,8 @@ import ida.ipl.bak.Board.Position;
 
 public class Car {
 
-	public Position start = null;
 	public Position end = null;
+	public Position start = null;
 	
 	public Car() {}
 	

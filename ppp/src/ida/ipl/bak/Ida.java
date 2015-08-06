@@ -16,14 +16,7 @@ import java.util.ArrayList;
 
 public class Ida implements MessageUpcall
 {
-	/**
-	 * Port type used for sending a request to the server
-	 */
-	PortType requestPortType = new PortType(
-		PortType.COMMUNICATION_RELIABLE,
-		PortType.SERIALIZATION_OBJECT,
-		PortType.RECEIVE_AUTO_UPCALLS,
-		PortType.CONNECTION_MANY_TO_ONE);
+	IbisCapabilities ibisCapabilities = new IbisCapabilities(IbisCapabilities.ELECTIONS_STRICT);
 
 	/**
 	 * Port type used for sending a reply back
@@ -34,231 +27,71 @@ public class Ida implements MessageUpcall
 		PortType.RECEIVE_EXPLICIT,
 		PortType.CONNECTION_ONE_TO_ONE);
 
-	IbisCapabilities ibisCapabilities = new IbisCapabilities(IbisCapabilities.ELECTIONS_STRICT);
+	/**
+	 * Port type used for sending a request to the server
+	 */
+	PortType requestPortType = new PortType(
+		PortType.COMMUNICATION_RELIABLE,
+		PortType.SERIALIZATION_OBJECT,
+		PortType.RECEIVE_AUTO_UPCALLS,
+		PortType.CONNECTION_MANY_TO_ONE);
 
 	private Ibis myIbis;
 
-	private ReceivePort serverReceiver;
-
 	private Queue serverQueue;
+
+	private ReceivePort serverReceiver;
 	private Integer serverSolution;
 
-	private static void solve(Board board, boolean useCache)
+	@SuppressWarnings("unchecked")
+	@Override
+	public void upcall(ReadMessage message) throws IOException, ClassNotFoundException
 	{
-		BoardCache cache = null;
-		if (useCache)
+		Object req = message.readObject();
+		int waitTime = -1;
+		if (req instanceof ArrayList)
 		{
-			cache = new BoardCache();
-		}
-
-		int bound = board.distance();
-		int solutions = 0;
-
-		System.out.print("Try bound ");
-		System.out.flush();
-
-		do
-		{
-			board.setBound(bound);
-
-			System.out.print(bound + " ");
-			System.out.flush();
-
-			if (useCache)
+			for (Board b : (ArrayList<Board>)req)
 			{
-				solutions = solutions(board, cache);
+				serverQueue.enqueue(b);
 			}
-			else
-			{
-				solutions = solutions(board);
-			}
-
-			bound++;
-		} while (solutions == 0);
-
-		System.out.print("\nresult is " + solutions + " solutions of " + board.bound() + " steps");
-		System.out.flush();
-	}
-
-	/**
-	 * expands this board into all possible positions, and returns the number of
-	 * solutions. Will cut off at the bound set in the board.
-	 */
-	private static int solutions(Board board)
-	{
-
-		if (board.distance() == 1)
-		{
-			return 1;
+			serverQueue.notifyAll();
 		}
-
-		//		System.out.println(board.toString(level));
-
-		if (board.distance() > board.bound())
+		else if (req instanceof Double)
 		{
-			return 0;
-		}
-
-		ArrayList<Board> moves = board.makeMoves();
-		int result = 0;
-
-		for (Board newBoard : moves)
-		{
-			if (newBoard != null)
+			waitTime *= ((Double)req).intValue();
+			if (serverQueue != null && serverQueue.size() == 0)
 			{
-				result += solutions(newBoard);
+				serverQueue.notifyAll();
+				serverQueue = null;
 			}
 		}
-		return result;
-	}
-
-	/**
-	 * expands this board into all possible positions, and returns the number of
-	 * solutions. Will cut off at the bound set in the board.
-	 */
-	private static int solutions(Board board, BoardCache cache)
-	{
-		if (board.distance() == 1)
+		else if (req instanceof Integer)
 		{
-			return 1;
+			serverSolution = serverSolution.intValue() + ((Integer)req).intValue();
+			serverQueue.notifyAll();
+			if (serverQueue != null && serverQueue.size() == 0)
+				serverQueue = null;
 		}
 
-		if (board.distance() > board.bound())
-		{
-			return 0;
-		}
+		IbisIdentifier origin = message.origin().ibisIdentifier();
+		String name = message.origin().name();
+		message.finish();
+		Object board;
+		SendPort replyPort = myIbis.createSendPort(replyPortType);
 
-		ArrayList<Board> moves = board.makeMoves(cache);
-		int result = 0;
+		// connect to the requestor's receive port
+		replyPort.connect(origin, name);
 
-		for (Board newBoard : moves)
-		{
-			if (newBoard != null)
-			{
-				result += solutions(newBoard, cache);
-			}
-		}
-		cache.put(moves);
-
-		return result;
-	}
-
-	public static void main(String[] args)
-	{
-		String fileName = null;
-		boolean cache = true;
-
-		for (int i = 0; i < args.length; i++)
-		{
-			if (args[i].equals("--file"))
-			{
-				fileName = args[++i];
-			}
-			else if (args[i].equals("--nocache"))
-			{
-				cache = false;
-			}
-			else
-			{
-				System.err.println("No such option: " + args[i]);
-				System.exit(1);
-			}
-		}
-
-		Board initialBoard = null;
-
-		if (fileName == null)
-		{
-			System.err.println("No input file provided.");
-			System.exit(1);
-		}
+		// create a reply message
+		WriteMessage reply = replyPort.newMessage();
+		if (serverQueue != null && (board = serverQueue.dequeue(1000)) != null) //Wait max 1 second for queue to fill
+			reply.writeObject(board);
 		else
-		{
-			try
-			{
-				initialBoard = new Board(fileName);
-			}
-			catch (Exception e)
-			{
-				System.err.println("could not initialize board from file: " + e);
-				System.exit(1);
-			}
-		}
-		System.out.println("Running IDA*, initial board:");
-		System.out.println(initialBoard);
+			reply.writeObject(new Integer(waitTime));
+		reply.finish();
 
-		long start = System.currentTimeMillis();
-		solve(initialBoard, cache);
-		long end = System.currentTimeMillis();
-
-		// NOTE: this is printed to standard error! The rest of the output is
-		// constant for each set of parameters. Printing this to standard error
-		// makes the output of standard out comparable with "diff"
-		System.err.println("ida took " + (end - start) + " milliseconds");
-	}
-
-	@SuppressWarnings("unused")
-	private void run(Board board, boolean useCache) throws Exception
-	{
-		// Create an ibis instance.
-		// Notice createIbis uses varargs for its parameters.
-		myIbis = IbisFactory.createIbis(ibisCapabilities, null, requestPortType, replyPortType);
-
-		// Elect a server
-		IbisIdentifier server = myIbis.registry().elect("Server");
-
-		// If I am the server, run server, else run client.
-		if (server.equals(myIbis.identifier()))
-		{
-			server(board);
-		}
-		else
-		{
-			client(server, useCache);
-		}
-
-		// End ibis.
-		myIbis.end();
-	}
-
-	private void server(Board board) throws IOException, ClassNotFoundException
-	{
-		serverReceiver = myIbis.createReceivePort(requestPortType, "server", this);
-		serverReceiver.enableConnections();
-		serverReceiver.enableMessageUpcalls();
-		int bound = board.distance();
-
-		System.out.print("Try bound ");
-		System.out.flush();
-
-		do
-		{
-			serverQueue = new Queue();
-			serverSolution = 0;
-			board.setBound(bound);
-
-			System.out.print(bound + " ");
-			System.out.flush();
-			int count = 0;
-			while (serverQueue != null && serverQueue.size() > 0)
-			{
-				try
-				{
-					serverQueue.wait(100 + count * 50);
-				}
-				catch (InterruptedException e)
-				{
-				}
-				count++;
-			}
-
-			bound++;
-		} while (serverSolution.intValue() == 0);
-
-		System.out.print("\nresult is " + serverSolution + " solutions of " + board.bound() + " steps");
-		System.out.flush();
-
-		serverReceiver.close();
+		replyPort.close();
 	}
 
 	private void client(IbisIdentifier server, boolean useCache) throws IOException, ClassNotFoundException
@@ -337,54 +170,221 @@ public class Ida implements MessageUpcall
 		receivePort.close();
 	}
 
-	@SuppressWarnings("unchecked")
-	@Override
-	public void upcall(ReadMessage message) throws IOException, ClassNotFoundException
+	@SuppressWarnings("unused")
+	private void run(Board board, boolean useCache) throws Exception
 	{
-		Object req = message.readObject();
-		int waitTime = -1;
-		if (req instanceof ArrayList)
-		{
-			for (Board b : (ArrayList<Board>)req)
-			{
-				serverQueue.enqueue(b);
-			}
-			serverQueue.notifyAll();
-		}
-		else if (req instanceof Double)
-		{
-			waitTime *= ((Double)req).intValue();
-			if (serverQueue != null && serverQueue.size() == 0)
-			{
-				serverQueue.notifyAll();
-				serverQueue = null;
-			}
-		}
-		else if (req instanceof Integer)
-		{
-			serverSolution = serverSolution.intValue() + ((Integer)req).intValue();
-			serverQueue.notifyAll();
-			if (serverQueue != null && serverQueue.size() == 0)
-				serverQueue = null;
-		}
+		// Create an ibis instance.
+		// Notice createIbis uses varargs for its parameters.
+		myIbis = IbisFactory.createIbis(ibisCapabilities, null, requestPortType, replyPortType);
 
-		IbisIdentifier origin = message.origin().ibisIdentifier();
-		String name = message.origin().name();
-		message.finish();
-		Object board;
-		SendPort replyPort = myIbis.createSendPort(replyPortType);
+		// Elect a server
+		IbisIdentifier server = myIbis.registry().elect("Server");
 
-		// connect to the requestor's receive port
-		replyPort.connect(origin, name);
-
-		// create a reply message
-		WriteMessage reply = replyPort.newMessage();
-		if (serverQueue != null && (board = serverQueue.dequeue(1000)) != null) //Wait max 1 second for queue to fill
-			reply.writeObject(board);
+		// If I am the server, run server, else run client.
+		if (server.equals(myIbis.identifier()))
+		{
+			server(board);
+		}
 		else
-			reply.writeObject(new Integer(waitTime));
-		reply.finish();
+		{
+			client(server, useCache);
+		}
 
-		replyPort.close();
+		// End ibis.
+		myIbis.end();
+	}
+
+	private void server(Board board) throws IOException, ClassNotFoundException
+	{
+		serverReceiver = myIbis.createReceivePort(requestPortType, "server", this);
+		serverReceiver.enableConnections();
+		serverReceiver.enableMessageUpcalls();
+		int bound = board.distance();
+
+		System.out.print("Try bound ");
+		System.out.flush();
+
+		do
+		{
+			serverQueue = new Queue();
+			serverSolution = 0;
+			board.setBound(bound);
+
+			System.out.print(bound + " ");
+			System.out.flush();
+			int count = 0;
+			while (serverQueue != null && serverQueue.size() > 0)
+			{
+				try
+				{
+					serverQueue.wait(100 + count * 50);
+				}
+				catch (InterruptedException e)
+				{
+				}
+				count++;
+			}
+
+			bound++;
+		} while (serverSolution.intValue() == 0);
+
+		System.out.print("\nresult is " + serverSolution + " solutions of " + board.bound() + " steps");
+		System.out.flush();
+
+		serverReceiver.close();
+	}
+
+	public static void main(String[] args)
+	{
+		String fileName = null;
+		boolean cache = true;
+
+		for (int i = 0; i < args.length; i++)
+		{
+			if (args[i].equals("--file"))
+			{
+				fileName = args[++i];
+			}
+			else if (args[i].equals("--nocache"))
+			{
+				cache = false;
+			}
+			else
+			{
+				System.err.println("No such option: " + args[i]);
+				System.exit(1);
+			}
+		}
+
+		Board initialBoard = null;
+
+		if (fileName == null)
+		{
+			System.err.println("No input file provided.");
+			System.exit(1);
+		}
+		else
+		{
+			try
+			{
+				initialBoard = new Board(fileName);
+			}
+			catch (Exception e)
+			{
+				System.err.println("could not initialize board from file: " + e);
+				System.exit(1);
+			}
+		}
+		System.out.println("Running IDA*, initial board:");
+		System.out.println(initialBoard);
+
+		long start = System.currentTimeMillis();
+		solve(initialBoard, cache);
+		long end = System.currentTimeMillis();
+
+		// NOTE: this is printed to standard error! The rest of the output is
+		// constant for each set of parameters. Printing this to standard error
+		// makes the output of standard out comparable with "diff"
+		System.err.println("ida took " + (end - start) + " milliseconds");
+	}
+
+	/**
+	 * expands this board into all possible positions, and returns the number of
+	 * solutions. Will cut off at the bound set in the board.
+	 */
+	private static int solutions(Board board)
+	{
+
+		if (board.distance() == 1)
+		{
+			return 1;
+		}
+
+		//		System.out.println(board.toString(level));
+
+		if (board.distance() > board.bound())
+		{
+			return 0;
+		}
+
+		ArrayList<Board> moves = board.makeMoves();
+		int result = 0;
+
+		for (Board newBoard : moves)
+		{
+			if (newBoard != null)
+			{
+				result += solutions(newBoard);
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * expands this board into all possible positions, and returns the number of
+	 * solutions. Will cut off at the bound set in the board.
+	 */
+	private static int solutions(Board board, BoardCache cache)
+	{
+		if (board.distance() == 1)
+		{
+			return 1;
+		}
+
+		if (board.distance() > board.bound())
+		{
+			return 0;
+		}
+
+		ArrayList<Board> moves = board.makeMoves(cache);
+		int result = 0;
+
+		for (Board newBoard : moves)
+		{
+			if (newBoard != null)
+			{
+				result += solutions(newBoard, cache);
+			}
+		}
+		cache.put(moves);
+
+		return result;
+	}
+
+	private static void solve(Board board, boolean useCache)
+	{
+		BoardCache cache = null;
+		if (useCache)
+		{
+			cache = new BoardCache();
+		}
+
+		int bound = board.distance();
+		int solutions = 0;
+
+		System.out.print("Try bound ");
+		System.out.flush();
+
+		do
+		{
+			board.setBound(bound);
+
+			System.out.print(bound + " ");
+			System.out.flush();
+
+			if (useCache)
+			{
+				solutions = solutions(board, cache);
+			}
+			else
+			{
+				solutions = solutions(board);
+			}
+
+			bound++;
+		} while (solutions == 0);
+
+		System.out.print("\nresult is " + solutions + " solutions of " + board.bound() + " steps");
+		System.out.flush();
 	}
 }

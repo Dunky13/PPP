@@ -22,24 +22,24 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 	private enum Status
 	{
-		INITIALIZING,
-		FILLING_DEQUE,
-		PROCESSING_DEQUE,
 		DEQUE_EMPTY,
-		WAITING_FOR_WORKERS,
-		DONE
+		DONE,
+		FILLING_DEQUE,
+		INITIALIZING,
+		PROCESSING_DEQUE,
+		WAITING_FOR_WORKERS
 	}
 
-	private final Ida parent;
-	private final HashMap<IbisIdentifier, SendPort> senders;
-	private ReceivePort receiver;
-	private final Deque<Board> deque;
-	private Status status;
 	private final AtomicInteger busyWorkers;
-	private final AtomicInteger solutions;
 	private BoardCache cache;
+	private final Deque<Board> deque;
+	private final Ida parent;
+	private ReceivePort receiver;
+	private final HashMap<IbisIdentifier, SendPort> senders;
+	private final AtomicInteger solutions;
+	private Status status;
 
-	Server(Ida parent) throws IOException
+	public Server(Ida parent) throws IOException
 	{
 		this.parent = parent;
 		senders = new HashMap<IbisIdentifier, SendPort>();
@@ -47,48 +47,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		busyWorkers = new AtomicInteger(0);
 		status = Status.INITIALIZING;
 		solutions = new AtomicInteger(0);
-	}
-
-	/**
-	 * Creates a receive port to receive board requests from workers.
-	 * 
-	 * @throws IOException
-	 */
-	private void openPorts() throws IOException
-	{
-		receiver = parent.ibis.createReceivePort(Ida.portType, "server", this, this, new Properties());
-		receiver.enableConnections();
-		receiver.enableMessageUpcalls();
-	}
-
-	/**
-	 * Sends a termination message to all connected workers and closes all
-	 * ports.
-	 * 
-	 * @throws IOException
-	 */
-	public void shutdown() throws IOException
-	{
-		// Terminate the pool
-		status = Status.DONE;
-		parent.ibis.registry().terminate();
-
-		// Close ports (and send termination messages)
-		try
-		{
-			for (SendPort sender : senders.values())
-			{
-				WriteMessage wm = sender.newMessage();
-				wm.writeBoolean(true);
-				wm.finish();
-				sender.close();
-			}
-			receiver.close();
-		}
-		catch (ConnectionClosedException e)
-		{
-			// do nothing
-		}
 	}
 
 	/**
@@ -136,26 +94,124 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 	}
 
-	/**
-	 * Waits until all workers have finished their work and sent the number of
-	 * solutions.
-	 */
-	private void waitForWorkers()
+	public void run(String fileName, boolean useCache) throws IOException
 	{
-		synchronized (this)
+		Board b = null;
+		if (fileName == null)
 		{
-			status = Status.WAITING_FOR_WORKERS;
-			while (busyWorkers.get() != 0)
+			System.err.println("No input file provided.");
+			parent.ibis.registry().terminate();
+			System.exit(1);
+		}
+		else
+		{
+			try
 			{
-				try
-				{
-					this.wait();
-				}
-				catch (InterruptedException e)
-				{
-				}
+				b = new Board(fileName);
+
+				b.setBound(b.distance());
+			}
+			catch (Exception e)
+			{
+				System.err.println("could not initialize board from file: " + e);
+				parent.ibis.registry().terminate();
+				System.exit(1);
 			}
 		}
+		if (b == null)
+		{
+			System.err.println("could not initialize board from file: " + fileName);
+			parent.ibis.registry().terminate();
+			System.exit(1);
+		}
+
+		if (useCache)
+			cache = new BoardCache();
+		System.out.println("Running IDA*, initial board:");
+		System.out.println(b);
+
+		// open Ibis ports
+		openPorts();
+
+		long start = System.currentTimeMillis();
+		solve(b);
+		long end = System.currentTimeMillis();
+
+		// NOTE: this is printed to standard error! The rest of the output is
+		// constant for each set of parameters. Printing this to standard error
+		// makes the output of standard out comparable with "diff"
+		System.err.println("Solving IDA took " + (end - start) + " milliseconds");
+	}
+
+	/**
+	 * Sends a termination message to all connected workers and closes all
+	 * ports.
+	 * 
+	 * @throws IOException
+	 */
+	public void shutdown() throws IOException
+	{
+		// Terminate the pool
+		status = Status.DONE;
+		parent.ibis.registry().terminate();
+
+		// Close ports (and send termination messages)
+		try
+		{
+			for (SendPort sender : senders.values())
+			{
+				WriteMessage wm = sender.newMessage();
+				wm.writeBoolean(true);
+				wm.finish();
+				sender.close();
+			}
+			receiver.close();
+		}
+		catch (ConnectionClosedException e)
+		{
+			// do nothing
+		}
+	}
+
+	/**
+	 * Processes a board request / notification of found solutions from a
+	 * worker.
+	 */
+	@Override
+	public void upcall(ReadMessage rm) throws IOException, ClassNotFoundException
+	{
+		// Process the incoming message and decrease the number of busy workers
+		IbisIdentifier sender = rm.origin().ibisIdentifier();
+		int requestValue = rm.readInt();
+		rm.finish();
+		if (requestValue != Ida.INIT_VALUE)
+		{
+			synchronized (this)
+			{
+				solutions.addAndGet(requestValue);
+				busyWorkers.decrementAndGet();
+				this.notify();
+			}
+		}
+
+		// Get the port to the sender and send the board
+		Board replyValue = getLastBoard(); // may block for some time
+		sendBoard(replyValue, sender);
+
+		// Increase the number of workers we are waiting for
+		busyWorkers.incrementAndGet();
+	}
+
+	/**
+	 * Send a board to a worker.
+	 */
+	void sendBoard(Board board, IbisIdentifier destination) throws IOException
+	{
+		SendPort port = senders.get(destination);
+		WriteMessage wm = port.newMessage();
+		wm.writeBoolean(false);
+		wm.writeObject(board);
+		wm.finish();
 	}
 
 	/**
@@ -188,44 +244,15 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	}
 
 	/**
-	 * Send a board to a worker.
+	 * Creates a receive port to receive board requests from workers.
+	 * 
+	 * @throws IOException
 	 */
-	void sendBoard(Board board, IbisIdentifier destination) throws IOException
+	private void openPorts() throws IOException
 	{
-		SendPort port = senders.get(destination);
-		WriteMessage wm = port.newMessage();
-		wm.writeBoolean(false);
-		wm.writeObject(board);
-		wm.finish();
-	}
-
-	/**
-	 * Processes a board request / notification of found solutions from a
-	 * worker.
-	 */
-	@Override
-	public void upcall(ReadMessage rm) throws IOException, ClassNotFoundException
-	{
-		// Process the incoming message and decrease the number of busy workers
-		IbisIdentifier sender = rm.origin().ibisIdentifier();
-		int requestValue = rm.readInt();
-		rm.finish();
-		if (requestValue != Ida.INIT_VALUE)
-		{
-			synchronized (this)
-			{
-				solutions.addAndGet(requestValue);
-				busyWorkers.decrementAndGet();
-				this.notify();
-			}
-		}
-
-		// Get the port to the sender and send the board
-		Board replyValue = getLastBoard(); // may block for some time
-		sendBoard(replyValue, sender);
-
-		// Increase the number of workers we are waiting for
-		busyWorkers.incrementAndGet();
+		receiver = parent.ibis.createReceivePort(Ida.portType, "server", this, this, new Properties());
+		receiver.enableConnections();
+		receiver.enableMessageUpcalls();
 	}
 
 	/**
@@ -344,52 +371,25 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		System.out.println("Solving board possible in " + solutions + " ways of " + --bound + " steps");
 	}
 
-	public void run(String fileName, boolean useCache) throws IOException
+	/**
+	 * Waits until all workers have finished their work and sent the number of
+	 * solutions.
+	 */
+	private void waitForWorkers()
 	{
-		Board b = null;
-		if (fileName == null)
+		synchronized (this)
 		{
-			System.err.println("No input file provided.");
-			parent.ibis.registry().terminate();
-			System.exit(1);
-		}
-		else
-		{
-			try
+			status = Status.WAITING_FOR_WORKERS;
+			while (busyWorkers.get() != 0)
 			{
-				b = new Board(fileName);
-
-				b.setBound(b.distance());
-			}
-			catch (Exception e)
-			{
-				System.err.println("could not initialize board from file: " + e);
-				parent.ibis.registry().terminate();
-				System.exit(1);
+				try
+				{
+					this.wait();
+				}
+				catch (InterruptedException e)
+				{
+				}
 			}
 		}
-		if (b == null)
-		{
-			System.err.println("could not initialize board from file: " + fileName);
-			parent.ibis.registry().terminate();
-			System.exit(1);
-		}
-
-		if (useCache)
-			cache = new BoardCache();
-		System.out.println("Running IDA*, initial board:");
-		System.out.println(b);
-
-		// open Ibis ports
-		openPorts();
-
-		long start = System.currentTimeMillis();
-		solve(b);
-		long end = System.currentTimeMillis();
-
-		// NOTE: this is printed to standard error! The rest of the output is
-		// constant for each set of parameters. Printing this to standard error
-		// makes the output of standard out comparable with "diff"
-		System.err.println("Solving IDA took " + (end - start) + " milliseconds");
 	}
 }

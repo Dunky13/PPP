@@ -13,6 +13,10 @@ import ibis.ipl.PortType;
 public class Ida
 {
 
+	public final static IbisCapabilities ibisCapabilities = new IbisCapabilities(
+		IbisCapabilities.ELECTIONS_STRICT,
+		IbisCapabilities.TERMINATION);
+
 	public final static int INIT_VALUE = -1;
 
 	public final static PortType portType = new PortType(
@@ -22,10 +26,6 @@ public class Ida
 		PortType.CONNECTION_MANY_TO_ONE,
 		PortType.CONNECTION_UPCALLS,
 		PortType.SERIALIZATION_OBJECT);
-
-	public final static IbisCapabilities ibisCapabilities = new IbisCapabilities(
-		IbisCapabilities.ELECTIONS_STRICT,
-		IbisCapabilities.TERMINATION);
 
 	public final Ibis ibis;
 

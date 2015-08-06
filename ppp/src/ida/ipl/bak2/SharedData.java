@@ -10,20 +10,33 @@ import ibis.ipl.SendPort;
 
 class SharedData
 {
+	enum BoundStatus
+	{
+		CHANGED,
+		CHANGING,
+		TOCHANGE;
+	}
+	enum ProgramStatus
+	{
+		DONE,
+		RUNNING
+	}
 	public static final Object lock = new Object();
-	private final Ida parent;
-	private final HashMap<IbisIdentifier, SendPort> senders;
-	private ReceivePort receiver;
+	private volatile BoundStatus bStatus;
+	private BoardCache cache;
+	private final AtomicInteger currentBound;
 	private final ConcurrentLinkedDeque<Board> deque;
-	private final AtomicInteger solutions;
+	private Board initialBoard;
 	private final AtomicInteger minimalQueueSize;
 	private final AtomicInteger nodesWaiting;
-	private final AtomicInteger currentBound;
-	private Board initialBoard;
-	private BoardCache cache;
+	private final Ida parent;
 
-	private volatile BoundStatus bStatus;
 	private volatile ProgramStatus pStatus;
+	private ReceivePort receiver;
+
+	private final HashMap<IbisIdentifier, SendPort> senders;
+
+	private final AtomicInteger solutions;
 
 	public SharedData(Ida parent)
 	{
@@ -38,89 +51,34 @@ class SharedData
 		this.pStatus = ProgramStatus.RUNNING;
 	}
 
-	void getters()
+	/**
+	 * Add boards to the queue and notify the waiting threads to start picking
+	 * up work.
+	 * 
+	 * @param boards
+	 */
+	public void addBoards(ArrayList<Board> boards)
 	{
-
-	}
-
-	public Ida getParent()
-	{
-		return parent;
-	}
-
-	public HashMap<IbisIdentifier, SendPort> getSenders()
-	{
-		return senders;
-	}
-
-	public ReceivePort getReceiver()
-	{
-		return receiver;
-	}
-
-	public ConcurrentLinkedDeque<Board> getDeque()
-	{
-		return deque;
-	}
-
-	public AtomicInteger getSolutions()
-	{
-		return solutions;
-	}
-
-	public AtomicInteger getNodesWaiting()
-	{
-		return nodesWaiting;
-	}
-
-	public int getMinimalQueueSize()
-	{
-		return minimalQueueSize.get();
-	}
-
-	public AtomicInteger getCurrentBound()
-	{
-		return currentBound;
-	}
-
-	public Board getInitialBoard()
-	{
-		return initialBoard;
-	}
-
-	public BoardCache getCache()
-	{
-		return cache;
-	}
-
-	public boolean useCache()
-	{
-		return this.cache != null;
-	}
-
-	public boolean programFinished()
-	{
-
-		boolean progFinished = this.pStatus == ProgramStatus.DONE || this.solutions.get() > 0 && this.boundFinished();
-		if (progFinished)
+		synchronized (deque)
 		{
-			this.pStatus = ProgramStatus.DONE;
+			for (Board b : boards)
+			{
+				deque.add(b);
+			}
 			SharedData.notifyAll(deque);
-			SharedData.notifyAll(lock);
 		}
-
-		return progFinished;
 	}
 
-	private boolean boundFinished()
+	public int addMoreBoardsToQueue()
 	{
-		boolean bound = deque.isEmpty() && this.bStatus != BoundStatus.CHANGING;
-		if (!this.senders.isEmpty()) //If there are slaves connected
-			bound = bound && this.nodesWaiting.get() == (this.senders.size() + 1);
+		if (deque.size() >= minimalQueueSize.get())
+			return 0;
+		return (minimalQueueSize.get() - deque.size()) * 2;
+	}
 
-		if (bound)
-			this.bStatus = BoundStatus.TOCHANGE;
-		return bound;
+	public void calculateMinimumQueueSize()
+	{
+		this.minimalQueueSize.set((this.senders.size() + 1) * 2);
 	}
 
 	/**
@@ -168,32 +126,54 @@ class SharedData
 		return b;
 	}
 
-	void setters()
+	public BoardCache getCache()
 	{
-
+		return cache;
 	}
 
-	public void setReceiver(ReceivePort receiver)
+	public AtomicInteger getCurrentBound()
 	{
-		this.receiver = receiver;
+		return currentBound;
 	}
 
-	public void setInitialBoard(Board initialBoard)
+	public ConcurrentLinkedDeque<Board> getDeque()
 	{
-		this.initialBoard = initialBoard;
-
-		while (!deque.isEmpty())
-			deque.remove();
-
-		ArrayList<Board> boards = this.useCache() ? initialBoard.makeMoves(getCache()) : initialBoard.makeMoves();
-
-		addBoards(boards);
-
+		return deque;
 	}
 
-	public void setCache(BoardCache cache)
+	public Board getInitialBoard()
 	{
-		this.cache = cache;
+		return initialBoard;
+	}
+
+	public int getMinimalQueueSize()
+	{
+		return minimalQueueSize.get();
+	}
+
+	public AtomicInteger getNodesWaiting()
+	{
+		return nodesWaiting;
+	}
+
+	public Ida getParent()
+	{
+		return parent;
+	}
+
+	public ReceivePort getReceiver()
+	{
+		return receiver;
+	}
+
+	public HashMap<IbisIdentifier, SendPort> getSenders()
+	{
+		return senders;
+	}
+
+	public AtomicInteger getSolutions()
+	{
+		return solutions;
 	}
 
 	/**
@@ -215,22 +195,46 @@ class SharedData
 
 	}
 
-	/**
-	 * Add boards to the queue and notify the waiting threads to start picking
-	 * up work.
-	 * 
-	 * @param boards
-	 */
-	public void addBoards(ArrayList<Board> boards)
+	public boolean programFinished()
 	{
-		synchronized (deque)
+
+		boolean progFinished = this.pStatus == ProgramStatus.DONE || this.solutions.get() > 0 && this.boundFinished();
+		if (progFinished)
 		{
-			for (Board b : boards)
-			{
-				deque.add(b);
-			}
+			this.pStatus = ProgramStatus.DONE;
 			SharedData.notifyAll(deque);
+			SharedData.notifyAll(lock);
 		}
+
+		return progFinished;
+	}
+
+	public void setCache(BoardCache cache)
+	{
+		this.cache = cache;
+	}
+
+	public void setInitialBoard(Board initialBoard)
+	{
+		this.initialBoard = initialBoard;
+
+		while (!deque.isEmpty())
+			deque.remove();
+
+		ArrayList<Board> boards = this.useCache() ? initialBoard.makeMoves(getCache()) : initialBoard.makeMoves();
+
+		addBoards(boards);
+
+	}
+
+	public void setReceiver(ReceivePort receiver)
+	{
+		this.receiver = receiver;
+	}
+
+	public boolean useCache()
+	{
+		return this.cache != null;
 	}
 
 	void calculators()
@@ -238,21 +242,39 @@ class SharedData
 
 	}
 
-	public void calculateMinimumQueueSize()
+	void getters()
 	{
-		this.minimalQueueSize.set((this.senders.size() + 1) * 2);
+
 	}
 
-	public int addMoreBoardsToQueue()
+	void setters()
 	{
-		if (deque.size() >= minimalQueueSize.get())
-			return 0;
-		return (minimalQueueSize.get() - deque.size()) * 2;
+
 	}
 
 	void statics()
 	{
 
+	}
+
+	private boolean boundFinished()
+	{
+		boolean bound = deque.isEmpty() && this.bStatus != BoundStatus.CHANGING;
+		if (!this.senders.isEmpty()) //If there are slaves connected
+			bound = bound && this.nodesWaiting.get() == (this.senders.size() + 1);
+
+		if (bound)
+			this.bStatus = BoundStatus.TOCHANGE;
+		return bound;
+	}
+
+	public static boolean notifyAll(Object o)
+	{
+		synchronized (o)
+		{
+			o.notifyAll();
+		}
+		return true;
 	}
 
 	public static boolean wait(Object o)
@@ -286,27 +308,5 @@ class SharedData
 			}
 		}
 		return true;
-	}
-
-	public static boolean notifyAll(Object o)
-	{
-		synchronized (o)
-		{
-			o.notifyAll();
-		}
-		return true;
-	}
-
-	enum BoundStatus
-	{
-		CHANGING,
-		TOCHANGE,
-		CHANGED;
-	}
-
-	enum ProgramStatus
-	{
-		RUNNING,
-		DONE
 	}
 }

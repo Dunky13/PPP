@@ -11,11 +11,6 @@ import java.util.Scanner;
 public class Board implements Serializable
 {
 	/**
-	 * 
-	 */
-	private static final long serialVersionUID = -7163026043346132515L;
-
-	/**
 	 * Class representing a position (line, column) on the board
 	 */
 	public static final class Position implements Serializable
@@ -25,20 +20,20 @@ public class Board implements Serializable
 		 */
 		private static final long serialVersionUID = 1509529483481639045L;
 
+		int col; // column
+
+		int lin; // line
+
 		public Position(int lin, int col)
 		{
 			this.lin = lin;
 			this.col = col;
 		}
-
 		public Position(Position pos)
 		{
 			this.lin = pos.lin;
 			this.col = pos.col;
 		}
-
-		int lin; // line
-		int col; // column
 
 		public void init(Position pos)
 		{
@@ -53,8 +48,10 @@ public class Board implements Serializable
 		}
 	}
 
-	/* the game is played on a 8x8 board */
-	private final int BOARD_SIZE = 8;
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -7163026043346132515L;
 
 	/*
 	 * array with one element for each position on the board. element (line,column) on
@@ -64,27 +61,42 @@ public class Board implements Serializable
 	 */
 	private char[] board;
 
-	/*
-	 * the exit of the parking
-	 */
-	private Position exit;
-
-	private int distance;
+	/* the game is played on a 8x8 board */
+	private final int BOARD_SIZE = 8;
 
 	private int bound;
 
 	private Car[] cars;
 
+	private int distance;
+
+	/*
+	 * the exit of the parking
+	 */
+	private Position exit;
+
 	private Car redCar;
 
-	public char getBoardValue(int lin, int col)
+	/** copy constructor */
+	public Board(Board origBoard)
 	{
-		return board[lin * BOARD_SIZE + col];
-	}
+		board = new char[BOARD_SIZE * BOARD_SIZE];
+		System.arraycopy(origBoard.board, 0, board, 0, BOARD_SIZE * BOARD_SIZE);
 
-	public void setBoardValue(char symbol, int lin, int col)
-	{
-		board[lin * BOARD_SIZE + col] = symbol;
+		cars = new Car[origBoard.cars.length];
+		for (int i = 0; i < origBoard.cars.length; i++)
+		{
+			cars[i] = new Car(origBoard.cars[i]);
+			if (origBoard.cars[i] == origBoard.redCar)
+			{
+				redCar = cars[i];
+			}
+		}
+
+		exit = new Position(origBoard.exit);
+
+		distance = origBoard.distance;
+		bound = origBoard.bound;
 	}
 
 	/*
@@ -180,26 +192,19 @@ public class Board implements Serializable
 		scanner.close();
 	}
 
-	/** copy constructor */
-	public Board(Board origBoard)
+	public int bound()
 	{
-		board = new char[BOARD_SIZE * BOARD_SIZE];
-		System.arraycopy(origBoard.board, 0, board, 0, BOARD_SIZE * BOARD_SIZE);
+		return bound;
+	}
 
-		cars = new Car[origBoard.cars.length];
-		for (int i = 0; i < origBoard.cars.length; i++)
-		{
-			cars[i] = new Car(origBoard.cars[i]);
-			if (origBoard.cars[i] == origBoard.redCar)
-			{
-				redCar = cars[i];
-			}
-		}
+	public int distance()
+	{
+		return distance;
+	}
 
-		exit = new Position(origBoard.exit);
-
-		distance = origBoard.distance;
-		bound = origBoard.bound;
+	public char getBoardValue(int lin, int col)
+	{
+		return board[lin * BOARD_SIZE + col];
 	}
 
 	public void init(Board origBoard)
@@ -219,116 +224,6 @@ public class Board implements Serializable
 
 		distance = origBoard.distance;
 		bound = origBoard.bound;
-	}
-
-	/**
-	 * estimates the distance to the goal
-	 */
-	private int calculateBoardDistance()
-	{
-		int result = 0;
-
-		int lin = exit.lin;
-		int col = exit.col;
-
-		if (lin == 0)
-		{
-			while (getBoardValue(lin, col) != '?')
-			{
-				if (getBoardValue(lin, col) != '.')
-				{
-					result++;
-				}
-				lin++;
-			}
-		}
-		else if (lin == BOARD_SIZE - 1)
-		{
-			while (getBoardValue(lin, col) != '?')
-			{
-				if (getBoardValue(lin, col) != '.')
-				{
-					result++;
-				}
-				lin--;
-			}
-		}
-		else if (col == 0)
-		{
-			while (getBoardValue(lin, col) != '?')
-			{
-				if (getBoardValue(lin, col) != '.')
-				{
-					result++;
-				}
-				col++;
-			}
-		}
-		else if (col == BOARD_SIZE - 1)
-		{
-			while (getBoardValue(lin, col) != '?')
-			{
-				if (getBoardValue(lin, col) != '.')
-				{
-					result++;
-				}
-				col--;
-			}
-		}
-
-		return result;
-	}
-
-	public void setBound(int bound)
-	{
-		this.bound = bound;
-	}
-
-	public int distance()
-	{
-		return distance;
-	}
-
-	public int bound()
-	{
-		return bound;
-	}
-
-	public String toString()
-	{
-		String result = "";
-		for (int y = 0; y < BOARD_SIZE; y++)
-		{
-			for (int x = 0; x < BOARD_SIZE; x++)
-			{
-				result += getBoardValue(y, x) + " ";
-			}
-			result += "\n";
-		}
-		return result;
-	}
-
-	/** for debug purposes */
-	public String toString(int prefixTabs)
-	{
-		String result = "";
-		String prefix = "";
-
-		for (int i = 0; i < prefixTabs; i++)
-		{
-			prefix += "\t";
-		}
-		result += prefix;
-
-		for (int y = 0; y < BOARD_SIZE; y++)
-		{
-			for (int x = 0; x < BOARD_SIZE; x++)
-			{
-				result += getBoardValue(y, x) + " ";
-			}
-			result += "\n" + prefix;
-		}
-		return result;
 	}
 
 	/**
@@ -475,5 +370,110 @@ public class Board implements Serializable
 
 		distance = calculateBoardDistance();
 		bound--;
+	}
+
+	public void setBoardValue(char symbol, int lin, int col)
+	{
+		board[lin * BOARD_SIZE + col] = symbol;
+	}
+
+	public void setBound(int bound)
+	{
+		this.bound = bound;
+	}
+
+	public String toString()
+	{
+		String result = "";
+		for (int y = 0; y < BOARD_SIZE; y++)
+		{
+			for (int x = 0; x < BOARD_SIZE; x++)
+			{
+				result += getBoardValue(y, x) + " ";
+			}
+			result += "\n";
+		}
+		return result;
+	}
+
+	/** for debug purposes */
+	public String toString(int prefixTabs)
+	{
+		String result = "";
+		String prefix = "";
+
+		for (int i = 0; i < prefixTabs; i++)
+		{
+			prefix += "\t";
+		}
+		result += prefix;
+
+		for (int y = 0; y < BOARD_SIZE; y++)
+		{
+			for (int x = 0; x < BOARD_SIZE; x++)
+			{
+				result += getBoardValue(y, x) + " ";
+			}
+			result += "\n" + prefix;
+		}
+		return result;
+	}
+
+	/**
+	 * estimates the distance to the goal
+	 */
+	private int calculateBoardDistance()
+	{
+		int result = 0;
+
+		int lin = exit.lin;
+		int col = exit.col;
+
+		if (lin == 0)
+		{
+			while (getBoardValue(lin, col) != '?')
+			{
+				if (getBoardValue(lin, col) != '.')
+				{
+					result++;
+				}
+				lin++;
+			}
+		}
+		else if (lin == BOARD_SIZE - 1)
+		{
+			while (getBoardValue(lin, col) != '?')
+			{
+				if (getBoardValue(lin, col) != '.')
+				{
+					result++;
+				}
+				lin--;
+			}
+		}
+		else if (col == 0)
+		{
+			while (getBoardValue(lin, col) != '?')
+			{
+				if (getBoardValue(lin, col) != '.')
+				{
+					result++;
+				}
+				col++;
+			}
+		}
+		else if (col == BOARD_SIZE - 1)
+		{
+			while (getBoardValue(lin, col) != '?')
+			{
+				if (getBoardValue(lin, col) != '.')
+				{
+					result++;
+				}
+				col--;
+			}
+		}
+
+		return result;
 	}
 }

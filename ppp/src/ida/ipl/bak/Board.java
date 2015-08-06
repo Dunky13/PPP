@@ -12,6 +12,8 @@ public class Board {
 	 * Class representing a position (line, column) on the board
 	 */
 	public static final class Position {
+		int col; // column
+		int lin; // line
 		public Position(int lin, int col) {
 			this.lin = lin;
 			this.col = col;
@@ -20,8 +22,6 @@ public class Board {
 			this.lin = pos.lin;
 			this.col = pos.col;
 		}
-		int lin; // line
-		int col; // column
 		
 		public void init(Position pos) {
 			lin = pos.lin;
@@ -33,9 +33,6 @@ public class Board {
 		}
 	}
 	
-	/* the game is played on a 8x8 board */
-	private final int BOARD_SIZE = 8;
-	
 	/*
 	 * array with one element for each position on the board. element (line,column) on
 	 * the board is (BOARD_SIZE * line) + column in this array ideally this would be
@@ -44,25 +41,39 @@ public class Board {
 	 */
 	private char[] board;
 	
+	/* the game is played on a 8x8 board */
+	private final int BOARD_SIZE = 8;
+	
+	private int bound;
+	
+	private Car[] cars;
+	
+	private int distance;
+
 	/*
 	 * the exit of the parking
 	 */
 	private Position exit;
 	
-	private int distance;
-	
-	private int bound;
-
-	private Car[] cars;
-	
 	private Car redCar;
 	
-	public char getBoardValue(int lin, int col) {
-		return board[lin * BOARD_SIZE + col];
-	}
-	
-	public void setBoardValue(char symbol, int lin, int col) {
-		board[lin * BOARD_SIZE + col] = symbol;
+	/** copy constructor */
+	public Board(Board origBoard) {
+		board = new char[BOARD_SIZE * BOARD_SIZE];
+		System.arraycopy(origBoard.board, 0, board, 0, BOARD_SIZE * BOARD_SIZE);
+		
+		cars = new Car[origBoard.cars.length];
+		for(int i = 0; i < origBoard.cars.length; i++) {
+			cars[i] = new Car(origBoard.cars[i]);
+			if(origBoard.cars[i] == origBoard.redCar) {
+				redCar = cars[i];
+			}
+		}
+		
+		exit = new Position(origBoard.exit);
+		
+		distance = origBoard.distance;
+		bound = origBoard.bound;
 	}
 	
 	/*
@@ -141,23 +152,16 @@ public class Board {
 		scanner.close();
 	}
 	
-	/** copy constructor */
-	public Board(Board origBoard) {
-		board = new char[BOARD_SIZE * BOARD_SIZE];
-		System.arraycopy(origBoard.board, 0, board, 0, BOARD_SIZE * BOARD_SIZE);
-		
-		cars = new Car[origBoard.cars.length];
-		for(int i = 0; i < origBoard.cars.length; i++) {
-			cars[i] = new Car(origBoard.cars[i]);
-			if(origBoard.cars[i] == origBoard.redCar) {
-				redCar = cars[i];
-			}
-		}
-		
-		exit = new Position(origBoard.exit);
-		
-		distance = origBoard.distance;
-		bound = origBoard.bound;
+	public int bound() {
+		return bound;
+	}
+	
+	public int distance() {
+		return distance;
+	}
+	
+	public char getBoardValue(int lin, int col) {
+		return board[lin * BOARD_SIZE + col];
 	}
 	
 	public void init(Board origBoard) {
@@ -176,90 +180,6 @@ public class Board {
 		bound = origBoard.bound;
 	}
 	
-	/**
-	 * estimates the distance to the goal
-	 */
-	private int calculateBoardDistance() {
-		int result = 0;
-		
-		int lin = exit.lin;
-		int col = exit.col;
-		
-		if(lin == 0) {
-			while(getBoardValue(lin, col) != '?') {
-				if(getBoardValue(lin, col) != '.') {
-					result++;
-				}
-				lin++;
-			}
-		} else if(lin == BOARD_SIZE - 1) {
-			while(getBoardValue(lin, col) != '?') {
-				if(getBoardValue(lin, col) != '.') {
-					result++;
-				}
-				lin--;
-			}
-		} else if(col == 0) {
-			while(getBoardValue(lin, col) != '?') {
-				if(getBoardValue(lin, col) != '.') {
-					result++;
-				}
-				col++;
-			}
-		} else if(col == BOARD_SIZE - 1) {
-			while(getBoardValue(lin, col) != '?') {
-				if(getBoardValue(lin, col) != '.') {
-					result++;
-				}
-				col--;
-			}
-		}
-		
-		return result;
-	}
-	
-	public void setBound(int bound) {
-		this.bound = bound;
-	}
-	
-	public int distance() {
-		return distance;
-	}
-	
-	public int bound() {
-		return bound;
-	}
-	
-	public String toString() {
-		String result = "";
-		for (int y = 0; y < BOARD_SIZE; y++) {
-			for (int x = 0; x < BOARD_SIZE; x++) {
-				result += getBoardValue(y, x) + " ";
-			}
-			result += "\n";
-		}
-		return result;
-	}
-	
-	/** for debug purposes */
-	public String toString(int prefixTabs) {
-		String result = "";
-		String prefix = "";
-		
-		for(int i = 0; i < prefixTabs; i++) {
-			prefix += "\t";
-		}
-		result += prefix;
-		
-		for (int y = 0; y < BOARD_SIZE; y++) {
-			for (int x = 0; x < BOARD_SIZE; x++) {
-				result += getBoardValue(y, x) + " ";
-			}
-			result += "\n" + prefix;
-		}
-		return result;
-	}
-
 	/**
 	 * Make all possible moves with this board position. As an optimization,
 	 * does not "undo" the move which created this board. Elements in the
@@ -378,5 +298,85 @@ public class Board {
 		
 		distance = calculateBoardDistance();
 		bound--;
+	}
+	
+	public void setBoardValue(char symbol, int lin, int col) {
+		board[lin * BOARD_SIZE + col] = symbol;
+	}
+	
+	public void setBound(int bound) {
+		this.bound = bound;
+	}
+
+	public String toString() {
+		String result = "";
+		for (int y = 0; y < BOARD_SIZE; y++) {
+			for (int x = 0; x < BOARD_SIZE; x++) {
+				result += getBoardValue(y, x) + " ";
+			}
+			result += "\n";
+		}
+		return result;
+	}
+	
+	/** for debug purposes */
+	public String toString(int prefixTabs) {
+		String result = "";
+		String prefix = "";
+		
+		for(int i = 0; i < prefixTabs; i++) {
+			prefix += "\t";
+		}
+		result += prefix;
+		
+		for (int y = 0; y < BOARD_SIZE; y++) {
+			for (int x = 0; x < BOARD_SIZE; x++) {
+				result += getBoardValue(y, x) + " ";
+			}
+			result += "\n" + prefix;
+		}
+		return result;
+	}
+	
+	/**
+	 * estimates the distance to the goal
+	 */
+	private int calculateBoardDistance() {
+		int result = 0;
+		
+		int lin = exit.lin;
+		int col = exit.col;
+		
+		if(lin == 0) {
+			while(getBoardValue(lin, col) != '?') {
+				if(getBoardValue(lin, col) != '.') {
+					result++;
+				}
+				lin++;
+			}
+		} else if(lin == BOARD_SIZE - 1) {
+			while(getBoardValue(lin, col) != '?') {
+				if(getBoardValue(lin, col) != '.') {
+					result++;
+				}
+				lin--;
+			}
+		} else if(col == 0) {
+			while(getBoardValue(lin, col) != '?') {
+				if(getBoardValue(lin, col) != '.') {
+					result++;
+				}
+				col++;
+			}
+		} else if(col == BOARD_SIZE - 1) {
+			while(getBoardValue(lin, col) != '?') {
+				if(getBoardValue(lin, col) != '.') {
+					result++;
+				}
+				col--;
+			}
+		}
+		
+		return result;
 	}
 }

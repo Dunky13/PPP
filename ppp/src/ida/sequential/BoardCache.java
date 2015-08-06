@@ -6,8 +6,8 @@ public class BoardCache {
 
 	public static final int MAX_CACHE_SIZE = 10 * 1024;
 
-	int size;
 	Board[] cache;
+	int size;
 
 	public BoardCache() {
 		size = 0;

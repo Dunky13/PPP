@@ -13,12 +13,12 @@ import ibis.ipl.WriteMessage;
 public class Slave implements MessageUpcall
 {
 
-	public static final int SENT_BOARD = -1;
 	public static final int NO_BOARD = -2;
-	private final Ida parent;
+	public static final int SENT_BOARD = -1;
 	private BoardCache cache;
 	private ReceivePort masterReceived;
 	private SendPort masterSend;
+	private final Ida parent;
 
 	public Slave(Ida parent)
 	{
@@ -119,6 +119,19 @@ public class Slave implements MessageUpcall
 		masterSend.connect(master, "server");
 	}
 
+	/**
+	 * Send solution
+	 * 
+	 * @param value
+	 * @throws IOException
+	 */
+	private void sendInt(int value) throws IOException
+	{
+		WriteMessage wm = masterSend.newMessage();
+		wm.writeInt(value);
+		wm.finish();
+	}
+
 	private void shutdown() throws IOException
 	{
 		// Close the ports
@@ -137,18 +150,5 @@ public class Slave implements MessageUpcall
 		{
 			this.notify();
 		}
-	}
-
-	/**
-	 * Send solution
-	 * 
-	 * @param value
-	 * @throws IOException
-	 */
-	private void sendInt(int value) throws IOException
-	{
-		WriteMessage wm = masterSend.newMessage();
-		wm.writeInt(value);
-		wm.finish();
 	}
 }
