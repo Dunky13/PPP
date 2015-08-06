@@ -1,8 +1,12 @@
 package ida.ipl;
 
 import java.io.IOException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
 import ibis.ipl.ConnectionClosedException;
 import ibis.ipl.IbisIdentifier;
 import ibis.ipl.MessageUpcall;
@@ -16,61 +20,75 @@ import ibis.ipl.WriteMessage;
 public class Server implements MessageUpcall, ReceivePortConnectUpcall
 {
 
-	private final SharedData data; // SharedData object is used to share the
-	// data that is accessible to the Server
-	// class between threads (The solving thread
-	// and Upcall threads)
-
-	private ServerCalculator calculation;
-
-	public Server(Ida parent)
-
+	private enum Status
 	{
-		this.data = new SharedData(parent);
-		this.calculation = new ServerCalculator(data);
+		INITIALIZING,
+		FILLING_DEQUE,
+		PROCESSING_DEQUE,
+		DEQUE_EMPTY,
+		WAITING_FOR_WORKERS,
+		DONE
 	}
 
-	public void run(String fileName, boolean useCache) throws IOException
+	private final Ida parent;
+	private final HashMap<IbisIdentifier, SendPort> senders;
+	private ReceivePort receiver;
+	private final Deque<Board> deque;
+	private Status status;
+	private final AtomicInteger busyWorkers;
+	private final AtomicInteger solutions;
+	private BoardCache cache;
+
+	Server(Ida parent) throws IOException
 	{
+		this.parent = parent;
+		senders = new HashMap<IbisIdentifier, SendPort>();
+		deque = new ArrayDeque<Board>();
+		busyWorkers = new AtomicInteger(0);
+		status = Status.INITIALIZING;
+		solutions = new AtomicInteger(0);
+	}
 
-		if (fileName == null)
+	/**
+	 * Creates a receive port to receive board requests from workers.
+	 * 
+	 * @throws IOException
+	 */
+	private void openPorts() throws IOException
+	{
+		receiver = parent.ibis.createReceivePort(Ida.portType, "master", this, this, new Properties());
+		receiver.enableConnections();
+		receiver.enableMessageUpcalls();
+	}
+
+	/**
+	 * Sends a termination message to all connected workers and closes all
+	 * ports.
+	 * 
+	 * @throws IOException
+	 */
+	public void shutdown() throws IOException
+	{
+		// Terminate the pool
+		status = Status.DONE;
+		parent.ibis.registry().terminate();
+
+		// Close ports (and send termination messages)
+		try
 		{
-			System.err.println("No input file provided.");
-			data.getParent().ibis.registry().terminate();
-			System.exit(1);
+			for (SendPort sender : senders.values())
+			{
+				WriteMessage wm = sender.newMessage();
+				wm.writeBoolean(true);
+				wm.finish();
+				sender.close();
+			}
+			receiver.close();
 		}
-		else
+		catch (ConnectionClosedException e)
 		{
-			try
-			{
-				Board b = new Board(fileName);
-				b.setBound(b.distance());
-				data.getCurrentBound().set(b.distance());
-				data.setInitialBoard(b);
-			}
-			catch (Exception e)
-			{
-				System.err.println("could not initialize board from file: " + e);
-				data.getParent().ibis.registry().terminate();
-				System.exit(1);
-			}
+			// do nothing
 		}
-		if (useCache)
-			data.setCache(new BoardCache());
-		System.out.println("Running IDA*, initial board:");
-		System.out.println(data.getInitialBoard());
-
-		// open Ibis ports
-		openPorts();
-
-		long start = System.currentTimeMillis();
-		execution();
-		long end = System.currentTimeMillis();
-
-		// NOTE: this is printed to standard error! The rest of the output is
-		// constant for each set of parameters. Printing this to standard error
-		// makes the output of standard out comparable with "diff"
-		System.err.println("Solving IDA took " + (end - start) + " milliseconds");
 	}
 
 	/**
@@ -83,10 +101,9 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		try
 		{
 			IbisIdentifier worker = spi.ibisIdentifier();
-			SendPort sender = data.getParent().ibis.createSendPort(Ida.portType);
-			sender.connect(worker, "slave");
-			data.getSenders().put(worker, sender);
-			data.calculateMinimumQueueSize();
+			SendPort sender = parent.ibis.createSendPort(Ida.portType);
+			sender.connect(worker, "worker");
+			senders.put(worker, sender);
 		}
 		catch (IOException e)
 		{
@@ -105,10 +122,9 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		try
 		{
 			IbisIdentifier worker = spi.ibisIdentifier();
-			SendPort sender = data.getSenders().get(worker);
+			SendPort sender = senders.get(worker);
 			sender.close();
-			data.getSenders().remove(worker);
-			data.getNodesWaiting().decrementAndGet();
+			senders.remove(worker);
 		}
 		catch (ConnectionClosedException e)
 		{
@@ -120,192 +136,260 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 	}
 
+	/**
+	 * Waits until all workers have finished their work and sent the number of
+	 * solutions.
+	 */
+	private void waitForWorkers()
+	{
+		synchronized (this)
+		{
+			status = Status.WAITING_FOR_WORKERS;
+			while (busyWorkers.get() != 0)
+			{
+				try
+				{
+					this.wait();
+				}
+				catch (InterruptedException e)
+				{
+				}
+			}
+		}
+	}
+
+	/**
+	 * Get the last board from the deque, which will have less twists and thus
+	 * more work on average than boards from the start of the deque.
+	 */
+	private Board getLastBoard()
+	{
+		Board board = null;
+		try
+		{
+			synchronized (deque)
+			{
+				while (status != Status.PROCESSING_DEQUE)
+				{
+					deque.wait();
+				}
+				board = deque.removeLast();
+				if (deque.isEmpty())
+				{
+					status = Status.DEQUE_EMPTY;
+				}
+			}
+		}
+		catch (InterruptedException e)
+		{
+			e.printStackTrace(System.err);
+		}
+		return board;
+	}
+
+	/**
+	 * Send a board to a worker.
+	 */
+	void sendBoard(Board board, IbisIdentifier destination) throws IOException
+	{
+		SendPort port = senders.get(destination);
+		WriteMessage wm = port.newMessage();
+		wm.writeBoolean(false);
+		wm.writeObject(board);
+		wm.finish();
+	}
+
+	/**
+	 * Processes a board request / notification of found solutions from a
+	 * worker.
+	 */
 	@Override
-	public void upcall(ReadMessage rm) throws IOException
+	public void upcall(ReadMessage rm) throws IOException, ClassNotFoundException
 	{
 		// Process the incoming message and decrease the number of busy workers
 		IbisIdentifier sender = rm.origin().ibisIdentifier();
-		data.getNodesWaiting().incrementAndGet();
-
 		int requestValue = rm.readInt();
 		rm.finish();
-		if (requestValue > 0)
-			data.getSolutions().addAndGet(requestValue);
-
-		if (data.programFinished())
-			return;
-
-		if (sendBoard(data.getBoards(SharedData.numberOfBoardsPerSend, false), sender))
-			data.getNodesWaiting().decrementAndGet();
-	}
-
-	private boolean sendBoard(ArrayList<Board> boards, IbisIdentifier destination)
-	{
-		boolean programFinished = data.programFinished();
-		SendPort port = data.getSenders().get(destination);
-		if (port == null)
-			return false;
-		try
+		if (requestValue != Ida.INIT_VALUE)
 		{
-			WriteMessage wm = port.newMessage(); //data.getNewMessage(port);
-			wm.writeBoolean(programFinished);
-			wm.writeInt(boards.size());
-			for (Board b : boards)
-				wm.writeObject(b);
-			wm.finish();
-			return !programFinished;
+			synchronized (this)
+			{
+				solutions.addAndGet(requestValue);
+				busyWorkers.decrementAndGet();
+				this.notify();
+			}
 		}
-		catch (IOException e)
-		{
-			return false;
-		}
-	}
 
-	private void execution() throws IOException
-	{
+		// Get the port to the sender and send the board
+		Board replyValue = getLastBoard(); // may block for some time
+		sendBoard(replyValue, sender);
 
-		System.out.print("Try bound ");
-		System.out.flush();
-
-		System.out.print(" " + data.getCurrentBound().get());
-
-		// Wait for ALL calclations to finish and to find a solution.
-		this.calculation.execute();
-
-		shutdown();
-
-		System.out.print("\nresult is " + data.getSolutions().get() + " solutions of " + data.getInitialBoard().bound() + " steps");
-		System.out.flush();
+		// Increase the number of workers we are waiting for
+		busyWorkers.incrementAndGet();
 	}
 
 	/**
-	 * Open a receiving port that allows upcalls to happen.
-	 * 
-	 * @throws IOException
+	 * Processes the first board from the deque. This version is not recursive
+	 * and slightly slower that the recursive one, but is easier to handle in
+	 * the presence of other threads working on the deque.
+	 *
+	 * The
 	 */
-	private void openPorts() throws IOException
+	private void processBoard(BoardCache cache, boolean first)
 	{
-		ReceivePort receiver = data.getParent().ibis.createReceivePort(Ida.portType, "server", this, this, new Properties());
-		receiver.enableConnections();
-		receiver.enableMessageUpcalls();
-		data.setReceiver(receiver);
-	}
-
-	/**
-	 * Sends a termination message to all connected workers and closes all
-	 * ports.
-	 * 
-	 * @throws IOException
-	 */
-	private void shutdown() throws IOException
-	{
-		// Terminate the pool
-		data.getParent().ibis.registry().terminate();
-
-		// Close ports (and send termination messages)
-		try
+		synchronized (deque)
 		{
-			for (SendPort sender : data.getSenders().values())
+			// Get a board from the deque, null if deque is empty
+			Board board;
+			if (first)
 			{
-				WriteMessage wm = sender.newMessage();
-				wm.writeBoolean(true);
-				wm.finish();
-				sender.close();
+				board = deque.pollFirst();
 			}
-			data.getReceiver().close();
-		}
-		catch (ConnectionClosedException e)
-		{
-			// do nothing
-		}
-	}
-
-	private class ServerCalculator implements Runnable
-	{
-		SharedData data;
-
-		ServerCalculator(SharedData data)
-		{
-			this.data = data;
-		}
-
-		public void run()
-		{
-			execute();
-		}
-
-		public void execute()
-		{
-			do
-			{
-				data.getNodesWaiting().incrementAndGet();
-				Board b = data.getBoard(true);
-				data.getNodesWaiting().decrementAndGet();
-
-				calculateQueueBoard(b);
-
-			} while (!data.programFinished());
-		}
-
-		/**
-		 * Looped to get boards from the queue
-		 * 
-		 * @throws IOException @throws
-		 */
-		private void calculateQueueBoard(Board b)
-		{
-
-			if (b == null && data.programFinished())
-			{
-				data.getNodesWaiting().incrementAndGet();
-				return;
-			}
-			if (b == null) // Should happen only if finished and needs to be caught to prevent null pointer exceptions.
-				return;
-
-			int solution = calculateBoardSolution(b);
-			if (solution > 0)
-				data.getSolutions().addAndGet(solution);
-
-		}
-
-		private int calculateBoardSolution(Board b)
-		{
-			if (b.distance() == 1)
-				return 1;
-			else if (b.distance() > b.bound())
-				return 0;
 			else
 			{
-				ArrayList<Board> boards = data.useCache() ? b.makeMoves(data.getCache()) : b.makeMoves();
-				if (boards.isEmpty())
-					return 0;
-				checkEnoughMoves(boards);
-				int solution = 0;
-				for (Board tmpBoard2 : boards)
-					solution += calculateBoardSolution(tmpBoard2);
-				return solution;
+				board = deque.pollLast();
 			}
-		}
-
-		private void checkEnoughMoves(ArrayList<Board> boards)
-		{
-			int boardsToAdd = 0;
-			if ((boardsToAdd = data.addMoreBoardsToQueue()) > 0) // If queue not full 'enough' fill it so the slaves have something to do as well.
-				data.addBoards(splitMoves(boards, boardsToAdd));
-			//Get the necessary boards to fill the queue
-		}
-
-		private ArrayList<Board> splitMoves(ArrayList<Board> boards, int size)
-		{
-			ArrayList<Board> tmpBoards = new ArrayList<Board>();
-			int boardSize = boards.size();
-			size = size > boardSize ? boardSize : size;
-			for (int i = 1; i <= size; i++)
+			if (board == null)
 			{
-				tmpBoards.add(boards.remove(boardSize - i));
+				status = Status.DEQUE_EMPTY;
+				return;
 			}
-			return tmpBoards;
+
+			// If the board is solved, increment the number of found solutions
+			if (board.distance() == 1)
+			{
+				solutions.incrementAndGet();
+				//				cache.put(board);
+				if (deque.isEmpty())
+				{
+					status = Status.DEQUE_EMPTY;
+				}
+				return;
+			}
+
+			// Stop searching at the bound
+			if (board.distance() > board.bound())
+			{
+				//				cache.put(board);
+				if (deque.isEmpty())
+				{
+					status = Status.DEQUE_EMPTY;
+				}
+				return;
+			}
+
+			// Generate all possible boards from this one by twisting it in
+			// every possible way. Gets new objects from the cache
+			ArrayList<Board> boards = cache == null ? board.makeMoves() : board.makeMoves(cache);
+
+			// Add all children to the beginning of the deque
+			for (Board child : boards)
+			{
+				deque.addFirst(child);
+			}
 		}
+	}
+
+	/**
+	 * Solves a Rubik's board by iteratively searching for solutions with a
+	 * greater depth. This guarantees the optimal solution is found. Repeats all
+	 * work for the previous iteration each iteration though...
+	 *
+	 * @param board
+	 *            the board to solve
+	 */
+	private void solve(Board board) throws IOException
+	{
+		// cache used for board objects. Doing new Board() for every move
+		// overloads the garbage collector
+
+		int bound = 0;
+
+		// determine how many boards we should process from the end of the deque
+		// in order get it ready for boards
+		int fillBoards = (int)Math.pow(senders.size() * (board.distance() - 1), 2);
+
+		System.out.print("Bound now:");
+
+		while (solutions.get() == 0)
+		{
+			status = Status.FILLING_DEQUE;
+			bound++;
+			board.setBound(bound);
+			deque.addFirst(board);
+
+			System.out.print(" " + bound);
+
+			while (deque.size() < fillBoards && !deque.isEmpty())
+			{
+				processBoard(cache, false);
+			}
+			synchronized (deque)
+			{
+				if (!deque.isEmpty())
+				{
+					status = Status.PROCESSING_DEQUE;
+					deque.notifyAll();
+				}
+			}
+			while (!deque.isEmpty())
+			{
+				processBoard(cache, true);
+			}
+			waitForWorkers();
+		}
+		shutdown();
+
+		System.out.println();
+		System.out.println("Solving board possible in " + solutions + " ways of " + bound + " steps");
+	}
+
+	public void run(String fileName, boolean useCache) throws IOException
+	{
+		Board b = null;
+		if (fileName == null)
+		{
+			System.err.println("No input file provided.");
+			parent.ibis.registry().terminate();
+			System.exit(1);
+		}
+		else
+		{
+			try
+			{
+				b = new Board(fileName);
+
+				b.setBound(b.distance());
+			}
+			catch (Exception e)
+			{
+				System.err.println("could not initialize board from file: " + e);
+				parent.ibis.registry().terminate();
+				System.exit(1);
+			}
+		}
+		if (b == null)
+		{
+			System.err.println("could not initialize board from file: " + fileName);
+			parent.ibis.registry().terminate();
+			System.exit(1);
+		}
+
+		if (useCache)
+			cache = new BoardCache();
+		System.out.println("Running IDA*, initial board:");
+		System.out.println(b);
+
+		// open Ibis ports
+		openPorts();
+
+		long start = System.currentTimeMillis();
+		solve(b);
+		long end = System.currentTimeMillis();
+
+		// NOTE: this is printed to standard error! The rest of the output is
+		// constant for each set of parameters. Printing this to standard error
+		// makes the output of standard out comparable with "diff"
+		System.err.println("Solving IDA took " + (end - start) + " milliseconds");
 	}
 }
