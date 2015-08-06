@@ -56,7 +56,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 */
 	private void openPorts() throws IOException
 	{
-		receiver = parent.ibis.createReceivePort(Ida.portType, "master", this, this, new Properties());
+		receiver = parent.ibis.createReceivePort(Ida.portType, "server", this, this, new Properties());
 		receiver.enableConnections();
 		receiver.enableMessageUpcalls();
 	}
@@ -102,7 +102,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			IbisIdentifier worker = spi.ibisIdentifier();
 			SendPort sender = parent.ibis.createSendPort(Ida.portType);
-			sender.connect(worker, "worker");
+			sender.connect(worker, "slave");
 			senders.put(worker, sender);
 		}
 		catch (IOException e)
