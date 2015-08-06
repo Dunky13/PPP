@@ -303,7 +303,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		// cache used for board objects. Doing new Board() for every move
 		// overloads the garbage collector
 
-		int bound = 0;
+		int bound = board.bound();
 
 		// determine how many boards we should process from the end of the deque
 		// in order get it ready for boards
@@ -314,7 +314,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		while (solutions.get() == 0)
 		{
 			status = Status.FILLING_DEQUE;
-			bound++;
+
 			board.setBound(bound);
 			deque.addFirst(board);
 
@@ -337,6 +337,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				processBoard(cache, true);
 			}
 			waitForWorkers();
+			bound++;
 		}
 		shutdown();
 
