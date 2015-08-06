@@ -317,7 +317,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			int solutions = doEasyTasks();
 
 			//This will work on while slaves haven't finished the hard work
-			solutions += doHarderTask();
+			//solutions += doHarderTask();
 			this.solutions.addAndGet(solutions);
 			waitForWorkers();
 			incrementBound();
