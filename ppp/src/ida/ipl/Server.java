@@ -1,11 +1,10 @@
 package ida.ipl;
 
 import java.io.IOException;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.Properties;
+import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 import ibis.ipl.ConnectionClosedException;
 import ibis.ipl.IbisIdentifier;
@@ -20,33 +19,25 @@ import ibis.ipl.WriteMessage;
 public class Server implements MessageUpcall, ReceivePortConnectUpcall
 {
 
-	private enum Status
-	{
-		DEQUE_EMPTY,
-		DONE,
-		FILLING_DEQUE,
-		INITIALIZING,
-		PROCESSING_DEQUE,
-		WAITING_FOR_WORKERS
-	}
-
 	private final AtomicInteger busyWorkers;
 	private BoardCache cache;
-	private final Deque<Board> deque;
+	private final LinkedBlockingDeque<Board> deque;
+	private Board initialBoard;
+	private int minQueueSize;
 	private final Ida parent;
+	private boolean programFoundSolution;
 	private ReceivePort receiver;
 	private final HashMap<IbisIdentifier, SendPort> senders;
 	private final AtomicInteger solutions;
-	private Status status;
 
 	public Server(Ida parent) throws IOException
 	{
 		this.parent = parent;
 		senders = new HashMap<IbisIdentifier, SendPort>();
-		deque = new ArrayDeque<Board>();
+		deque = new LinkedBlockingDeque<Board>();
 		busyWorkers = new AtomicInteger(0);
-		status = Status.INITIALIZING;
 		solutions = new AtomicInteger(0);
+		this.programFoundSolution = false;
 	}
 
 	/**
@@ -113,16 +104,12 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			}
 			catch (Exception e)
 			{
-				System.err.println("could not initialize board from file: " + e);
-				parent.ibis.registry().terminate();
-				System.exit(1);
+				closeIbisDueToError("could not initialize board from file: " + e);
 			}
 		}
 		if (b == null)
 		{
-			System.err.println("could not initialize board from file: " + fileName);
-			parent.ibis.registry().terminate();
-			System.exit(1);
+			closeIbisDueToError("could not initialize board from file: " + fileName);
 		}
 
 		if (useCache)
@@ -134,7 +121,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		openPorts();
 
 		long start = System.currentTimeMillis();
-		solve(b);
+		solveServerSide();
 		long end = System.currentTimeMillis();
 
 		// NOTE: this is printed to standard error! The rest of the output is
@@ -152,7 +139,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	public void shutdown() throws IOException
 	{
 		// Terminate the pool
-		status = Status.DONE;
 		parent.ibis.registry().terminate();
 
 		// Close ports (and send termination messages)
@@ -195,52 +181,69 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 
 		// Get the port to the sender and send the board
-		Board replyValue = getLastBoard(); // may block for some time
+		Board replyValue = getBoard(false); // may block for some time
 		sendBoard(replyValue, sender);
 
 		// Increase the number of workers we are waiting for
 		busyWorkers.incrementAndGet();
 	}
 
-	/**
-	 * Send a board to a worker.
-	 */
-	void sendBoard(Board board, IbisIdentifier destination) throws IOException
+	private void closeIbisDueToError(String error)
 	{
-		SendPort port = senders.get(destination);
-		WriteMessage wm = port.newMessage();
-		wm.writeBoolean(false);
-		wm.writeObject(board);
-		wm.finish();
-	}
-
-	/**
-	 * Get the last board from the deque, which will have less twists and thus
-	 * more work on average than boards from the start of the deque.
-	 */
-	private Board getLastBoard()
-	{
-		Board board = null;
+		System.err.println(error);
 		try
 		{
-			synchronized (deque)
-			{
-				while (status != Status.PROCESSING_DEQUE)
-				{
-					deque.wait();
-				}
-				board = deque.removeLast();
-				if (deque.isEmpty())
-				{
-					status = Status.DEQUE_EMPTY;
-				}
-			}
+			parent.ibis.registry().terminate();
+		}
+		catch (IOException e)
+		{
+		}
+		System.exit(1);
+	}
+
+	private int doEasyTasks()
+	{
+		int solutions = 0;
+		while (deque.size() < this.minQueueSize && !deque.isEmpty())
+		{
+			Board board = getBoard(true);
+			solutions += processBoard(board);
+		}
+		return solutions;
+	}
+
+	private int doHarderTask()
+	{
+		int solutions = 0;
+		while (!deque.isEmpty())
+		{
+			Board board = getBoard(false);
+			solutions += processBoard(board);
+		}
+		return solutions;
+	}
+
+	private Board getBoard(boolean getEasyTask)
+	{
+		try
+		{
+			return getEasyTask ? deque.takeFirst() : deque.takeLast();
 		}
 		catch (InterruptedException e)
 		{
-			e.printStackTrace(System.err);
 		}
-		return board;
+		return null;
+	}
+
+	private void incrementBound()
+	{
+		this.programFoundSolution = solutions.get() > 0;
+		if (!this.programFoundSolution)
+		{
+			int bound = initialBoard.bound() + 1;
+			initialBoard.setBound(bound);
+			System.out.print(" " + bound);
+		}
 	}
 
 	/**
@@ -255,66 +258,37 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		receiver.enableMessageUpcalls();
 	}
 
-	/**
-	 * Processes the first board from the deque. This version is not recursive
-	 * and slightly slower that the recursive one, but is easier to handle in
-	 * the presence of other threads working on the deque.
-	 *
-	 * The
-	 */
-	private void processBoard(BoardCache cache, boolean first)
+	private int processBoard(Board b)
 	{
-		synchronized (deque)
+		if (b == null)
+			return 0;
+		// If the board is solved, increment the number of found solutions
+		if (b.distance() == 1)
+			return 1;
+
+		// Stop searching at the bound
+		if (b.distance() > b.bound())
+			return 0;
+		ArrayList<Board> boards = cache == null ? b.makeMoves() : b.makeMoves(cache);
+		for (Board child : boards)
 		{
-			// Get a board from the deque, null if deque is empty
-			Board board;
-			if (first)
-			{
-				board = deque.pollFirst();
-			}
-			else
-			{
-				board = deque.pollLast();
-			}
-			if (board == null)
-			{
-				status = Status.DEQUE_EMPTY;
-				return;
-			}
-
-			// If the board is solved, increment the number of found solutions
-			if (board.distance() == 1)
-			{
-				solutions.incrementAndGet();
-				//				cache.put(board);
-				if (deque.isEmpty())
-				{
-					status = Status.DEQUE_EMPTY;
-				}
-				return;
-			}
-
-			// Stop searching at the bound
-			if (board.distance() > board.bound())
-			{
-				//				cache.put(board);
-				if (deque.isEmpty())
-				{
-					status = Status.DEQUE_EMPTY;
-				}
-				return;
-			}
-
-			// Generate all possible boards from this one by twisting it in
-			// every possible way. Gets new objects from the cache
-			ArrayList<Board> boards = cache == null ? board.makeMoves() : board.makeMoves(cache);
-
-			// Add all children to the beginning of the deque
-			for (Board child : boards)
-			{
-				deque.addFirst(child);
-			}
+			deque.addFirst(child);
 		}
+		if (cache != null)
+			cache.put(boards);
+		return 0;
+	}
+
+	/**
+	 * Send a board to a worker.
+	 */
+	private void sendBoard(Board board, IbisIdentifier destination) throws IOException
+	{
+		SendPort port = senders.get(destination);
+		WriteMessage wm = port.newMessage();
+		wm.writeBoolean(false);
+		wm.writeObject(board);
+		wm.finish();
 	}
 
 	/**
@@ -325,50 +299,39 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 * @param board
 	 *            the board to solve
 	 */
-	private void solve(Board board) throws IOException
+	private void solveServerSide() throws IOException
 	{
 		// cache used for board objects. Doing new Board() for every move
 		// overloads the garbage collector
 
-		int bound = board.bound();
-
 		// determine how many boards we should process from the end of the deque
 		// in order get it ready for boards
-		int fillBoards = (int)Math.pow(senders.size() * (board.distance() - 1), 2);
 
 		System.out.print("Bound now:");
 
-		while (solutions.get() == 0)
+		while (this.programFoundSolution)
 		{
-			status = Status.FILLING_DEQUE;
 
-			board.setBound(bound);
-			deque.addFirst(board);
+			deque.addFirst(initialBoard);
 
-			System.out.print(" " + bound++);
+			minQueueSize = (int)Math.pow(senders.size() * (initialBoard.distance() - 1), 2);
 
-			while (deque.size() < fillBoards && !deque.isEmpty())
-			{
-				processBoard(cache, false);
-			}
-			synchronized (deque)
-			{
-				if (!deque.isEmpty())
-				{
-					status = Status.PROCESSING_DEQUE;
-					deque.notifyAll();
-				}
-			}
-			while (!deque.isEmpty())
-			{
-				processBoard(cache, true);
-			}
+			//Leave the harder tasks for the slaves
+			int solutions = doEasyTasks();
+
+			if (!deque.isEmpty())
+				deque.notifyAll();
+
+			//This will work on while slaves haven't finished the hard work
+			solutions += doHarderTask();
+			this.solutions.addAndGet(solutions);
 			waitForWorkers();
+			incrementBound();
 		}
 		shutdown();
 
 		System.out.println();
-		System.out.println("Solving board possible in " + solutions + " ways of " + --bound + " steps");
+		System.out.println("Solving board possible in " + solutions + " ways of " + initialBoard.bound() + " steps");
 	}
 
 	/**
@@ -379,7 +342,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	{
 		synchronized (this)
 		{
-			status = Status.WAITING_FOR_WORKERS;
 			while (busyWorkers.get() != 0)
 			{
 				try
