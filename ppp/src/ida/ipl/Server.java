@@ -266,14 +266,27 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			return 1;
 		else if (board.distance() > board.bound())
 			return 0;
-		ArrayList<Board> boards = cache == null ? board.makeMoves() : board.makeMoves(cache);
-		for (Board child : boards)
+		else
 		{
-			deque.addFirst(child);
+			ArrayList<Board> boards = cache == null ? board.makeMoves() : board.makeMoves(cache);
+			if (cache != null)
+			{
+				for (Board child : boards)
+				{
+					deque.addFirst(child);
+					cache.put(board);
+				}
+			}
+			else
+			{
+				for (Board child : boards)
+				{
+					deque.addFirst(child);
+				}
+			}
+
+			return 0;
 		}
-		if (cache != null)
-			cache.put(boards);
-		return 0;
 	}
 
 	/**
@@ -309,16 +322,16 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		while (!this.programFoundSolution)
 		{
 
-			deque.addFirst(initialBoard);
+			int solution = processBoard(initialBoard);
 
 			minQueueSize = (int)Math.pow(senders.size() * (initialBoard.distance() - 1), 2);
 
 			//Leave the harder tasks for the slaves
-			int solutions = doEasyTasks();
+			solution += doEasyTasks();
 
 			//This will work on while slaves haven't finished the hard work
-			//solutions += doHarderTask();
-			this.solutions.addAndGet(solutions);
+			solution += doHarderTask();
+			this.solutions.addAndGet(solution);
 			waitForWorkers();
 			incrementBound();
 		}
