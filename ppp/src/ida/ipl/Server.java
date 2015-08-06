@@ -284,14 +284,14 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			{
 				for (Board child : board.makeMoves(this.cache))
 				{
-					deque.putFirst(child);
+					deque.addFirst(child);
 					//					this.cache.put(child);
 				}
 			}
 			else
 			{
 				for (Board child : board.makeMoves())
-					deque.putFirst(child);
+					deque.addFirst(child);
 			}
 
 			return 0;
