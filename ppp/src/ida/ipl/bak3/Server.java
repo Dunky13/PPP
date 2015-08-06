@@ -1,7 +1,6 @@
-package ida.ipl;
+package ida.ipl.bak3;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Properties;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -19,23 +18,26 @@ import ibis.ipl.WriteMessage;
 public class Server implements MessageUpcall, ReceivePortConnectUpcall
 {
 
+	private final AtomicInteger busyWorkers;
 	private BoardCache cache;
+	private boolean useCache;
 	private final LinkedBlockingDeque<Board> deque;
 	private Board initialBoard;
+	private int minQueueSize;
 	private final Ida parent;
+	private boolean programFoundSolution;
 	private ReceivePort receiver;
 	private final HashMap<IbisIdentifier, SendPort> senders;
 	private final AtomicInteger solutions;
-	private boolean useCache;
-	private final AtomicInteger busyWorkers;
 
 	public Server(Ida parent) throws IOException
 	{
 		this.parent = parent;
 		senders = new HashMap<IbisIdentifier, SendPort>();
 		deque = new LinkedBlockingDeque<Board>();
-		solutions = new AtomicInteger(0);
 		busyWorkers = new AtomicInteger(0);
+		solutions = new AtomicInteger(0);
+		this.programFoundSolution = false;
 	}
 
 	/**
@@ -107,7 +109,8 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			closeIbisDueToError("could not initialize board from file: " + fileName);
 		}
-		if (this.useCache = useCache)
+		this.useCache = useCache;
+		if (useCache)
 			this.cache = new BoardCache();
 		System.out.println("Running IDA*, initial board:");
 		System.out.println(this.initialBoard);
@@ -116,7 +119,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		openPorts();
 
 		long start = System.currentTimeMillis();
-		execute();
+		solveServerSide();
 		long end = System.currentTimeMillis();
 
 		// NOTE: this is printed to standard error! The rest of the output is
@@ -178,8 +181,9 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		// Get the port to the sender and send the board
 		Board replyValue = getBoard(false); // may block for some time
 		sendBoard(replyValue, sender);
-		busyWorkers.incrementAndGet();
+
 		// Increase the number of workers we are waiting for
+		busyWorkers.incrementAndGet();
 	}
 
 	private void closeIbisDueToError(String error)
@@ -195,45 +199,23 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		System.exit(1);
 	}
 
-	/**
-	 * Creates a receive port to receive board requests from workers.
-	 * 
-	 * @throws IOException
-	 */
-	private void openPorts() throws IOException
+	private int doEasyTasks()
 	{
-		receiver = parent.ibis.createReceivePort(Ida.portType, "server", this, this, new Properties());
-		receiver.enableConnections();
-		receiver.enableMessageUpcalls();
-	}
-
-	private void execute() throws IOException
-	{
-		System.out.print("Try bound ");
-		System.out.flush();
-		System.out.print(" " + this.initialBoard.bound());
-		do
+		int solutions = 0;
+		while (deque.size() < this.minQueueSize && !deque.isEmpty())
 		{
-			int solution = processBoard(this.initialBoard);
-
-			//Leave the harder tasks for the slaves
-			solution += doCalculation();
-
-			this.solutions.addAndGet(solution);
-			waitForWorkers();
-		} while (this.solutions.get() == 0);
-		shutdown();
-
-		System.out.println();
-		System.out.println("Solving board possible in " + solutions + " ways of " + initialBoard.bound() + " steps");
+			Board board = getBoard(true);
+			solutions += processBoard(board);
+		}
+		return solutions;
 	}
 
-	private int doCalculation()
+	private int doHarderTask()
 	{
 		int solutions = 0;
 		while (!deque.isEmpty())
 		{
-			Board board = getBoard(true);
+			Board board = getBoard(false);
 			solutions += processBoard(board);
 		}
 		return solutions;
@@ -251,7 +233,43 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		return null;
 	}
 
+	private boolean incrementBound()
+	{
+		this.programFoundSolution = solutions.get() > 0;
+		if (!this.programFoundSolution)
+		{
+			int bound = this.initialBoard.bound() + 1;
+			this.initialBoard.setBound(bound);
+			System.out.print(" " + bound);
+		}
+		return !programFoundSolution;
+	}
+
+	/**
+	 * Creates a receive port to receive board requests from workers.
+	 * 
+	 * @throws IOException
+	 */
+	private void openPorts() throws IOException
+	{
+		receiver = parent.ibis.createReceivePort(Ida.portType, "server", this, this, new Properties());
+		receiver.enableConnections();
+		receiver.enableMessageUpcalls();
+	}
+
 	private int processBoard(Board board)
+	{
+		try
+		{
+			return processBoardWithException(board);
+		}
+		catch (InterruptedException e)
+		{
+		}
+		return 0;
+	}
+
+	private int processBoardWithException(Board board) throws InterruptedException
 	{
 		if (board == null)
 			return 0;
@@ -264,30 +282,16 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			if (this.useCache)
 			{
-				ArrayList<Board> boards = board.makeMoves(this.cache);
-				for (int i = 0; i < boards.size(); i++)
+				for (Board child : board.makeMoves(this.cache))
 				{
-					Board child = boards.get(i);
-					if (i < boards.size() / 2)
-						deque.addFirst(child);
-					else
-					{
-						processBoard(child);
-						this.cache.put(child);
-					}
+					deque.addFirst(child);
+					//					this.cache.put(child);
 				}
 			}
 			else
 			{
-				ArrayList<Board> boards = board.makeMoves();
-				for (int i = 0; i < boards.size(); i++)
-				{
-					Board child = boards.get(i);
-					if (i < boards.size() / 2)
-						deque.addFirst(child);
-					else
-						processBoard(child);
-				}
+				for (Board child : board.makeMoves())
+					deque.addFirst(child);
 			}
 
 			return 0;
@@ -304,6 +308,38 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		wm.writeBoolean(false);
 		wm.writeObject(board);
 		wm.finish();
+	}
+
+	/**
+	 * Solves a Rubik's board by iteratively searching for solutions with a
+	 * greater depth. This guarantees the optimal solution is found. Repeats all
+	 * work for the previous iteration each iteration though...
+	 *
+	 * @param board
+	 *            the board to solve
+	 */
+	private void solveServerSide() throws IOException
+	{
+		System.out.print("Try bound ");
+		System.out.flush();
+		System.out.print(" " + this.initialBoard.bound());
+		do
+		{
+			minQueueSize = (int)Math.pow(senders.size() * (this.initialBoard.distance() - 1), 2);
+			int solution = processBoard(this.initialBoard);
+
+			//Leave the harder tasks for the slaves
+			solution += doEasyTasks();
+
+			//This will work on while slaves haven't finished the hard work
+			solution += doHarderTask();
+			this.solutions.addAndGet(solution);
+			waitForWorkers();
+		} while (incrementBound());
+		shutdown();
+
+		System.out.println();
+		System.out.println("Solving board possible in " + solutions + " ways of " + initialBoard.bound() + " steps");
 	}
 
 	/**
