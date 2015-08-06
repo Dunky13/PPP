@@ -28,6 +28,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	private final AtomicInteger solutions;
 	private boolean useCache;
 	private final AtomicInteger busyWorkers;
+	private boolean programWorking;
 
 	public Server(Ida parent) throws IOException
 	{
@@ -221,11 +222,23 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 			this.solutions.addAndGet(solution);
 			waitForWorkers();
-		} while (this.solutions.get() == 0);
+		} while (incrementBound());
 		shutdown();
 
 		System.out.println();
 		System.out.println("Solving board possible in " + solutions + " ways of " + initialBoard.bound() + " steps");
+	}
+
+	private boolean incrementBound()
+	{
+		this.programWorking = this.solutions.get() == 0;
+		if (this.programWorking)
+		{
+			int bound = this.initialBoard.bound() + 1;
+			this.initialBoard.setBound(bound);
+			System.out.print(" " + bound);
+		}
+		return this.programWorking;
 	}
 
 	private int doCalculation()
