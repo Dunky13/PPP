@@ -56,24 +56,26 @@ public class Slave implements MessageUpcall
 		}
 		else
 		{
-			int numberOfBoards = rm.readInt();
-			ArrayList<Board> boards = new ArrayList<Board>();
-			for (int i = 0; i < numberOfBoards; i++)
-			{
-				boards.add((Board)rm.readObject()); // Read board from the message.
-			}
+			//			int numberOfBoards = 1;
+			//			ArrayList<Board> boards = new ArrayList<Board>();
+			//			for (int i = 0; i < numberOfBoards; i++)
+			//			{
+			//				boards.add((Board)rm.readObject()); // Read board from the message.
+			//			}
+			Board board = (Board)rm.readObject();
 			rm.finish();
-			if (boards.isEmpty()) // prevent null pointer exceptions
+			//			if (boards.isEmpty()) // prevent null pointer exceptions
+			if (board == null)
 			{
 				sendInt(Slave.NO_BOARD); // If in some miraculous case no board is received return an error to the Master, this also ensures the slave is kept
 				// in the loop of messages.
 				return;
 			}
 			int solution = 0;
-			for (Board b : boards)
-			{
-				solution += calculateJob(b);
-			}
+			//			for (Board b : boards)
+			//			{
+			solution += calculateJob(board);
+			//			}
 			sendInt(solution);
 		}
 	}
