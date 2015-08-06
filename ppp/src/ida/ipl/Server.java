@@ -268,7 +268,11 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			return 0;
 		else
 		{
-			ArrayList<Board> boards = cache == null ? board.makeMoves() : board.makeMoves(cache);
+			ArrayList<Board> boards;
+			if (cache == null)
+				boards = board.makeMoves();
+			else
+				boards = board.makeMoves(cache);
 			if (cache != null)
 			{
 				for (Board child : boards)
@@ -311,12 +315,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 */
 	private void solveServerSide() throws IOException
 	{
-		// cache used for board objects. Doing new Board() for every move
-		// overloads the garbage collector
-
-		// determine how many boards we should process from the end of the deque
-		// in order get it ready for boards
-
 		System.out.print("Bound now:");
 
 		while (!this.programFoundSolution)
