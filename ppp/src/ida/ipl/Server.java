@@ -158,11 +158,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 	}
 
-	/**
-	 * Get the last board from the deque, which will have less twists and thus
-	 * more work on average than boards from the start of the deque.
-	 */
-	private Board getLastBoard()
+	private Board getBoard(boolean getLast)
 	{
 		Board board = null;
 		try
@@ -173,7 +169,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				{
 					deque.wait();
 				}
-				board = deque.removeLast();
+				board = getLast ? deque.pollLast() : deque.pollFirst();
 				if (deque.isEmpty())
 				{
 					status = Status.DEQUE_EMPTY;
@@ -221,7 +217,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 
 		// Get the port to the sender and send the board
-		Board replyValue = getLastBoard(); // may block for some time
+		Board replyValue = getBoard(true); // may block for some time
 		sendBoard(replyValue, sender);
 
 		// Increase the number of workers we are waiting for
@@ -235,20 +231,13 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 *
 	 * The
 	 */
-	private void processBoard(BoardCache cache, boolean first)
+	private void processBoard(BoardCache cache, boolean getLast)
 	{
+		Board board = getBoard(getLast);
 		synchronized (deque)
 		{
 			// Get a board from the deque, null if deque is empty
-			Board board;
-			if (first)
-			{
-				board = deque.pollFirst();
-			}
-			else
-			{
-				board = deque.pollLast();
-			}
+
 			if (board == null)
 			{
 				status = Status.DEQUE_EMPTY;
@@ -318,11 +307,11 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			board.setBound(bound);
 			deque.addFirst(board);
 
-			System.out.print(" " + bound);
+			System.out.print(" " + bound++);
 
 			while (deque.size() < fillBoards && !deque.isEmpty())
 			{
-				processBoard(cache, false);
+				processBoard(cache, true);
 			}
 			synchronized (deque)
 			{
@@ -334,15 +323,14 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			}
 			while (!deque.isEmpty())
 			{
-				processBoard(cache, true);
+				processBoard(cache, false);
 			}
 			waitForWorkers();
-			bound++;
 		}
 		shutdown();
 
 		System.out.println();
-		System.out.println("Solving board possible in " + solutions + " ways of " + bound + " steps");
+		System.out.println("Solving board possible in " + solutions + " ways of " + --bound + " steps");
 	}
 
 	public void run(String fileName, boolean useCache) throws IOException
