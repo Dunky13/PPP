@@ -34,21 +34,15 @@ public class BoardCache
 	public void put(ArrayList<Board> boards)
 	{
 		for (Board board : boards)
-		{
 			this.put(board);
-		}
 	}
 
 	public void put(Board board)
 	{
 		if (board == null)
-		{
 			return;
-		}
 		if (size >= MAX_CACHE_SIZE)
-		{
 			return;
-		}
 		cache[size] = board;
 		size++;
 	}

@@ -20,6 +20,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 	private final AtomicInteger busyWorkers;
 	private BoardCache cache;
+	private boolean useCache;
 	private final LinkedBlockingDeque<Board> deque;
 	private Board initialBoard;
 	private int minQueueSize;
@@ -108,7 +109,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			closeIbisDueToError("could not initialize board from file: " + fileName);
 		}
-
+		this.useCache = useCache;
 		if (useCache)
 			this.cache = new BoardCache();
 		System.out.println("Running IDA*, initial board:");
@@ -279,12 +280,12 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			return 0;
 		else
 		{
-			if (this.cache != null)
+			if (this.useCache)
 			{
 				for (Board child : board.makeMoves(this.cache))
 				{
 					deque.putFirst(child);
-					this.cache.put(child);
+					//					this.cache.put(child);
 				}
 			}
 			else
