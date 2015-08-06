@@ -103,6 +103,8 @@ public class Slave implements MessageUpcall
 			{
 				solution += calculateJob(board);
 			}
+			if (cache != null)
+				cache.put(boards);
 			return solution;
 		}
 	}
