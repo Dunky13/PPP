@@ -258,6 +258,18 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 	private int processBoard(Board board)
 	{
+		try
+		{
+			return processBoardWithException(board);
+		}
+		catch (InterruptedException e)
+		{
+		}
+		return 0;
+	}
+
+	private int processBoardWithException(Board board) throws InterruptedException
+	{
 		if (board == null)
 			return 0;
 		// If the board is solved, increment the number of found solutions
@@ -267,20 +279,18 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			return 0;
 		else
 		{
-			if (cache != null)
+			if (this.cache != null)
 			{
-				for (Board child : board.makeMoves(cache))
+				for (Board child : board.makeMoves(this.cache))
 				{
-					deque.addFirst(child);
-					cache.put(child);
+					deque.putFirst(child);
+					this.cache.put(child);
 				}
 			}
 			else
 			{
 				for (Board child : board.makeMoves())
-				{
-					deque.addFirst(child);
-				}
+					deque.putFirst(child);
 			}
 
 			return 0;
