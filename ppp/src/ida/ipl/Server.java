@@ -158,7 +158,11 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 	}
 
-	private Board getBoard(boolean getLast)
+	/**
+	 * Get the last board from the deque, which will have less twists and thus
+	 * more work on average than boards from the start of the deque.
+	 */
+	private Board getLastBoard()
 	{
 		Board board = null;
 		try
@@ -169,7 +173,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 				{
 					deque.wait();
 				}
-				board = getLast ? deque.pollLast() : deque.pollFirst();
+				board = deque.removeLast();
 				if (deque.isEmpty())
 				{
 					status = Status.DEQUE_EMPTY;
@@ -217,7 +221,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		}
 
 		// Get the port to the sender and send the board
-		Board replyValue = getBoard(true); // may block for some time
+		Board replyValue = getLastBoard(); // may block for some time
 		sendBoard(replyValue, sender);
 
 		// Increase the number of workers we are waiting for
@@ -231,13 +235,20 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 *
 	 * The
 	 */
-	private void processBoard(BoardCache cache, boolean getLast)
+	private void processBoard(BoardCache cache, boolean first)
 	{
-		Board board = getBoard(getLast);
 		synchronized (deque)
 		{
 			// Get a board from the deque, null if deque is empty
-
+			Board board;
+			if (first)
+			{
+				board = deque.pollFirst();
+			}
+			else
+			{
+				board = deque.pollLast();
+			}
 			if (board == null)
 			{
 				status = Status.DEQUE_EMPTY;
@@ -311,7 +322,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 			while (deque.size() < fillBoards && !deque.isEmpty())
 			{
-				processBoard(cache, true);
+				processBoard(cache, false);
 			}
 			synchronized (deque)
 			{
@@ -323,7 +334,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			}
 			while (!deque.isEmpty())
 			{
-				processBoard(cache, false);
+				processBoard(cache, true);
 			}
 			waitForWorkers();
 		}
