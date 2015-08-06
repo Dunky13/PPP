@@ -1,7 +1,6 @@
 package ida.ipl;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Properties;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -97,24 +96,23 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			try
 			{
-				initialBoard = new Board(fileName);
-
-				initialBoard.setBound(initialBoard.distance());
+				this.initialBoard = new Board(fileName);
+				this.initialBoard.setBound(this.initialBoard.distance());
 			}
 			catch (Exception e)
 			{
 				closeIbisDueToError("could not initialize board from file: " + e);
 			}
 		}
-		if (initialBoard == null)
+		if (this.initialBoard == null)
 		{
 			closeIbisDueToError("could not initialize board from file: " + fileName);
 		}
 
 		if (useCache)
-			cache = new BoardCache();
+			this.cache = new BoardCache();
 		System.out.println("Running IDA*, initial board:");
-		System.out.println(initialBoard);
+		System.out.println(this.initialBoard);
 
 		// open Ibis ports
 		openPorts();
@@ -234,15 +232,16 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		return null;
 	}
 
-	private void incrementBound()
+	private boolean incrementBound()
 	{
 		this.programFoundSolution = solutions.get() > 0;
 		if (!this.programFoundSolution)
 		{
-			int bound = initialBoard.bound() + 1;
-			initialBoard.setBound(bound);
+			int bound = this.initialBoard.bound() + 1;
+			this.initialBoard.setBound(bound);
 			System.out.print(" " + bound);
 		}
+		return !programFoundSolution;
 	}
 
 	/**
@@ -268,22 +267,17 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			return 0;
 		else
 		{
-			ArrayList<Board> boards;
-			if (cache == null)
-				boards = board.makeMoves();
-			else
-				boards = board.makeMoves(cache);
 			if (cache != null)
 			{
-				for (Board child : boards)
+				for (Board child : board.makeMoves(cache))
 				{
 					deque.addFirst(child);
-					cache.put(board);
+					cache.put(child);
 				}
 			}
 			else
 			{
-				for (Board child : boards)
+				for (Board child : board.makeMoves())
 				{
 					deque.addFirst(child);
 				}
@@ -315,14 +309,13 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 	 */
 	private void solveServerSide() throws IOException
 	{
-		System.out.print("Bound now:");
-
-		while (!this.programFoundSolution)
+		System.out.print("Try bound ");
+		System.out.flush();
+		System.out.print(" " + this.initialBoard.bound());
+		do
 		{
-
-			int solution = processBoard(initialBoard);
-
-			minQueueSize = (int)Math.pow(senders.size() * (initialBoard.distance() - 1), 2);
+			minQueueSize = (int)Math.pow(senders.size() * (this.initialBoard.distance() - 1), 2);
+			int solution = processBoard(this.initialBoard);
 
 			//Leave the harder tasks for the slaves
 			solution += doEasyTasks();
@@ -331,8 +324,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			solution += doHarderTask();
 			this.solutions.addAndGet(solution);
 			waitForWorkers();
-			incrementBound();
-		}
+		} while (incrementBound());
 		shutdown();
 
 		System.out.println();
