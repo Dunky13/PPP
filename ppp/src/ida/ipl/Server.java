@@ -257,18 +257,16 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		receiver.enableMessageUpcalls();
 	}
 
-	private int processBoard(Board b)
+	private int processBoard(Board board)
 	{
-		if (b == null)
+		if (board == null)
 			return 0;
 		// If the board is solved, increment the number of found solutions
-		if (b.distance() == 1)
+		if (board.distance() == 1)
 			return 1;
-
-		// Stop searching at the bound
-		if (b.distance() > b.bound())
+		else if (board.distance() > board.bound())
 			return 0;
-		ArrayList<Board> boards = cache == null ? b.makeMoves() : b.makeMoves(cache);
+		ArrayList<Board> boards = cache == null ? board.makeMoves() : board.makeMoves(cache);
 		for (Board child : boards)
 		{
 			deque.addFirst(child);

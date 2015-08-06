@@ -29,6 +29,7 @@ public class Board implements Serializable
 			this.lin = lin;
 			this.col = col;
 		}
+
 		public Position(Position pos)
 		{
 			this.lin = pos.lin;
