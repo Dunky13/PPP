@@ -87,7 +87,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 	public void run(String fileName, boolean useCache) throws IOException
 	{
-		Board b = null;
 		if (fileName == null)
 		{
 			System.err.println("No input file provided.");
@@ -98,16 +97,16 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		{
 			try
 			{
-				b = new Board(fileName);
+				initialBoard = new Board(fileName);
 
-				b.setBound(b.distance());
+				initialBoard.setBound(initialBoard.distance());
 			}
 			catch (Exception e)
 			{
 				closeIbisDueToError("could not initialize board from file: " + e);
 			}
 		}
-		if (b == null)
+		if (initialBoard == null)
 		{
 			closeIbisDueToError("could not initialize board from file: " + fileName);
 		}
@@ -115,7 +114,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		if (useCache)
 			cache = new BoardCache();
 		System.out.println("Running IDA*, initial board:");
-		System.out.println(b);
+		System.out.println(initialBoard);
 
 		// open Ibis ports
 		openPorts();
