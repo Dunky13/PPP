@@ -318,9 +318,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			//Leave the harder tasks for the slaves
 			int solutions = doEasyTasks();
 
-			if (!deque.isEmpty())
-				deque.notifyAll();
-
 			//This will work on while slaves haven't finished the hard work
 			solutions += doHarderTask();
 			this.solutions.addAndGet(solutions);
