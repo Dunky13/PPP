@@ -308,7 +308,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 
 		System.out.print("Bound now:");
 
-		while (this.programFoundSolution)
+		while (!this.programFoundSolution)
 		{
 
 			deque.addFirst(initialBoard);
