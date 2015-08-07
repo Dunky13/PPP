@@ -252,18 +252,6 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		return solutions;
 	}
 
-	private Board getBoard(boolean getEasyTask)
-	{
-		try
-		{
-			return getEasyTask ? deque.takeFirst() : deque.takeLast();
-		}
-		catch (InterruptedException e)
-		{
-		}
-		return null;
-	}
-
 	private int processBoard(Board board)
 	{
 		if (board == null)
@@ -319,6 +307,18 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		wm.finish();
 	}
 
+	private Board getBoard(boolean getEasyTask)
+	{
+		try
+		{
+			return getEasyTask ? deque.takeFirst() : deque.takeLast();
+		}
+		catch (InterruptedException e)
+		{
+		}
+		return null;
+	}
+
 	/**
 	 * Waits until all workers have finished their work and sent the number of
 	 * solutions.
@@ -339,4 +339,5 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			}
 		}
 	}
+
 }
