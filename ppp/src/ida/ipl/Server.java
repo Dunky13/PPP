@@ -226,7 +226,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 		shutdown();
 
 		System.out.println();
-		System.out.println("Solving board possible in " + solutions + " ways of " + initialBoard.bound() + " steps");
+		System.out.println("result is " + solutions.get() + " solutions of " + initialBoard.bound() + " steps");
 	}
 
 	private boolean incrementBound()
