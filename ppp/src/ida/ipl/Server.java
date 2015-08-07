@@ -263,6 +263,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 			return 0;
 		else
 		{
+			int solution = 0;
 			if (this.useCache)
 			{
 				ArrayList<Board> boards = board.makeMoves(this.cache);
@@ -273,7 +274,7 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 						deque.addFirst(child);
 					else
 					{
-						processBoard(child);
+						solution += processBoard(child);
 						this.cache.put(child);
 					}
 				}
@@ -287,11 +288,11 @@ public class Server implements MessageUpcall, ReceivePortConnectUpcall
 					if (i < boards.size() / 2)
 						deque.addFirst(child);
 					else
-						processBoard(child);
+						solution += processBoard(child);
 				}
 			}
+			return solution;
 
-			return 0;
 		}
 	}
 
